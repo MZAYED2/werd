@@ -512,6 +512,7 @@ fun LiveGlassWidgetPreview(
                     text = itemText,
                     color = textColor,
                     fontSize = settings.fontSizeSp.sp,
+                    fontFamily = com.zekr.widget.ui.theme.FontHelper.getComposeFontFamily(settings.font),
                     textAlign = TextAlign.Center,
                     fontWeight = FontWeight.Medium,
                     lineHeight = (settings.fontSizeSp * 1.45f).sp
@@ -521,6 +522,7 @@ fun LiveGlassWidgetPreview(
             Text(
                 text = itemSource,
                 color = textColor.copy(alpha = 0.82f),
+                fontFamily = com.zekr.widget.ui.theme.FontHelper.getComposeFontFamily(settings.font),
                 fontSize = 11.sp,
                 textAlign = TextAlign.Center
             )

@@ -36,6 +36,7 @@ class ShuffleWidgetAction : ActionCallback {
             prefs[KEY_PATTERN] = settings.pattern.id
             prefs[KEY_PATTERN_OPACITY] = settings.patternOpacity
             prefs[KEY_PATTERN_SCALE] = settings.patternScale
+            prefs[KEY_FONT] = settings.font.id
             prefs[KEY_FONT_SIZE] = settings.fontSizeSp
             prefs[KEY_UPDATE_VERSION] = System.currentTimeMillis()
         }

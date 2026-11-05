@@ -1,9 +1,6 @@
 package com.zekr.widget.widget
 
 import android.content.Context
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -23,24 +20,14 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
-import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.height
-import androidx.glance.layout.padding
 import androidx.glance.state.GlanceStateDefinition
 import androidx.glance.state.PreferencesGlanceStateDefinition
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextAlign
-import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import com.zekr.widget.data.model.ZekrEntity
 import com.zekr.widget.data.preferences.GlassColorPreset
 import com.zekr.widget.data.preferences.PatternType
+import com.zekr.widget.data.preferences.WidgetFont
 import com.zekr.widget.data.preferences.WidgetPreferencesRepository
 import com.zekr.widget.data.preferences.WidgetSettings
 import com.zekr.widget.data.repository.ZekrRepository
@@ -53,6 +40,7 @@ val KEY_GLASS_OPACITY = floatPreferencesKey("key_glass_opacity")
 val KEY_PATTERN = stringPreferencesKey("key_pattern")
 val KEY_PATTERN_OPACITY = floatPreferencesKey("key_pattern_opacity")
 val KEY_PATTERN_SCALE = floatPreferencesKey("key_pattern_scale")
+val KEY_FONT = stringPreferencesKey("key_font")
 val KEY_FONT_SIZE = intPreferencesKey("key_font_size")
 val KEY_UPDATE_VERSION = longPreferencesKey("key_update_version")
 
@@ -80,6 +68,7 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                         prefs[KEY_PATTERN] = settings.pattern.id
                         prefs[KEY_PATTERN_OPACITY] = settings.patternOpacity
                         prefs[KEY_PATTERN_SCALE] = settings.patternScale
+                        prefs[KEY_FONT] = settings.font.id
                         prefs[KEY_FONT_SIZE] = settings.fontSizeSp
                         prefs[KEY_UPDATE_VERSION] = version
                     }
@@ -123,24 +112,27 @@ class ZekrGlanceWidget : GlanceAppWidget() {
             val pattern = PatternType.values().find { it.id == patternStr } ?: PatternType.STAR_OCTAGRAM
             val patternOpacity = prefs[KEY_PATTERN_OPACITY] ?: 0.25f
             val patternScale = prefs[KEY_PATTERN_SCALE] ?: 1.0f
+            val fontStr = prefs[KEY_FONT] ?: WidgetFont.AMIRI.id
+            val font = WidgetFont.values().find { it.id == fontStr } ?: WidgetFont.AMIRI
             val fontSizeSp = prefs[KEY_FONT_SIZE] ?: 18
 
             val item: ZekrEntity = ZekrRepository.getById(appContext, currentId)
 
-            // Render fresh glass bitmap whenever preferences change
-            val glassBitmap = GlassRenderer.createGlassBackgroundBitmap(
+            // Render high-fidelity glass widget canvas with the exact Arabic typeface
+            val fullWidgetBitmap = GlassRenderer.createFullWidgetBitmap(
+                context = appContext,
                 width = 680,
                 height = 380,
+                item = item,
                 colorPreset = colorPreset,
                 opacity = glassOpacity,
                 pattern = pattern,
                 patternOpacity = patternOpacity,
                 patternScale = patternScale,
+                font = font,
+                fontSizeSp = fontSizeSp,
                 cornerRadius = 56f
             )
-
-            val textColor = Color(colorPreset.textColor)
-            val accentColor = Color(colorPreset.accentColor)
 
             GlanceTheme {
                 Box(
@@ -149,87 +141,12 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                         .clickable(actionRunCallback<ShuffleWidgetAction>()),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Glass Canvas Background
                     Image(
-                        provider = ImageProvider(glassBitmap),
-                        contentDescription = "Glass Background",
+                        provider = ImageProvider(fullWidgetBitmap),
+                        contentDescription = "Zekr Widget",
                         contentScale = ContentScale.FillBounds,
                         modifier = GlanceModifier.fillMaxSize()
                     )
-
-                    // Widget Interactive Content
-                    Column(
-                        modifier = GlanceModifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // Top Header: Type Pill & Subtle Tap Hint
-                        Row(
-                            modifier = GlanceModifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "⟳ انقر للتبديل",
-                                style = TextStyle(
-                                    color = ColorProvider(accentColor.copy(alpha = 0.75f)),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Normal
-                                )
-                            )
-                            Spacer(modifier = GlanceModifier.defaultWeight())
-                            Text(
-                                text = item.type.labelArabic,
-                                style = TextStyle(
-                                    color = ColorProvider(accentColor),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            )
-                        }
-
-                        Spacer(modifier = GlanceModifier.height(6.dp))
-
-                        // Center: Main Arabic Text (Authentic Hadith / Ayah / Zikr)
-                        Box(
-                            modifier = GlanceModifier
-                                .defaultWeight()
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = item.arabicText,
-                                style = TextStyle(
-                                    color = ColorProvider(textColor),
-                                    fontSize = fontSizeSp.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    textAlign = TextAlign.Center
-                                )
-                            )
-                        }
-
-                        Spacer(modifier = GlanceModifier.height(4.dp))
-
-                        // Footer: Exact Source & Authentication
-                        Row(
-                            modifier = GlanceModifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = if (item.reference.isNotEmpty()) "${item.source} • ${item.reference}" else item.source,
-                                style = TextStyle(
-                                    color = ColorProvider(textColor.copy(alpha = 0.82f)),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Normal,
-                                    textAlign = TextAlign.Center
-                                )
-                            )
-                        }
-                    }
                 }
             }
         }
