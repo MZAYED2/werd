@@ -4,27 +4,27 @@ import android.content.Context
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.datastore.preferences.core.Preferences
-import androidx.glance.Button
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.action.actionRunCallback
+import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
-import androidx.glance.background
-import androidx.glance.currentState
+import androidx.glance.appwidget.updateAll
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.width
 import androidx.glance.state.GlanceStateDefinition
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
@@ -32,61 +32,109 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import com.zekr.widget.data.model.ZekrEntity
+import com.zekr.widget.data.preferences.WidgetPreferencesRepository
 import com.zekr.widget.data.repository.ZekrRepository
+import com.zekr.widget.widget.render.GlassRenderer
+import kotlinx.coroutines.flow.first
+
+val KEY_ZEKR_ID = intPreferencesKey("key_current_zekr_id")
 
 class ZekrGlanceWidget : GlanceAppWidget() {
 
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
-    override suspend fun provideGlance(context: Context, id: GlanceId) {
-        provideContent {
-            val prefs = currentState<Preferences>()
-            val currentId = prefs[KEY_ZEKR_ID] ?: 1
-            val currentCount = prefs[KEY_COUNT] ?: 0
-            val item = ZekrRepository.getById(currentId)
+    companion object {
+        suspend fun shuffleToNext(context: Context) {
+            val appContext = context.applicationContext
+            val prefRepo = WidgetPreferencesRepository(appContext)
+            val settings = prefRepo.getSettings()
+            val currentId = prefRepo.getCurrentItemId()
 
+            val nextItem = ZekrRepository.getRandomItem(
+                context = appContext,
+                includeQuran = settings.includeQuran,
+                includeHadith = settings.includeHadith,
+                includeAzkar = settings.includeAzkar,
+                currentId = currentId
+            )
+            prefRepo.setCurrentItemId(nextItem.id)
+            ZekrGlanceWidget().updateAll(appContext)
+        }
+    }
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val appContext = context.applicationContext
+        val prefRepo = WidgetPreferencesRepository(appContext)
+        val settings = prefRepo.getSettings()
+        val currentId = prefRepo.getCurrentItemId()
+        val item: ZekrEntity = ZekrRepository.getById(appContext, currentId)
+
+        // Generate Glassmorphic Bitmap Canvas with selected pattern and opacity
+        val glassBitmap = GlassRenderer.createGlassBackgroundBitmap(
+            width = 680,
+            height = 380,
+            colorPreset = settings.colorPreset,
+            opacity = settings.glassOpacity,
+            pattern = settings.pattern,
+            cornerRadius = 56f
+        )
+
+        val textColor = Color(settings.colorPreset.textColor)
+        val accentColor = Color(settings.colorPreset.accentColor)
+
+        provideContent {
             GlanceTheme {
                 Box(
                     modifier = GlanceModifier
                         .fillMaxSize()
-                        .background(Color(0xFF0F3E2C))
-                        .cornerRadius(20.dp)
-                        .padding(14.dp),
+                        .clickable(actionRunCallback<ShuffleWidgetAction>()),
                     contentAlignment = Alignment.Center
                 ) {
+                    // Glass Canvas Background
+                    Image(
+                        provider = ImageProvider(glassBitmap),
+                        contentDescription = "Glass Background",
+                        contentScale = ContentScale.FillBounds,
+                        modifier = GlanceModifier.fillMaxSize()
+                    )
+
+                    // Widget Interactive Content
                     Column(
-                        modifier = GlanceModifier.fillMaxSize(),
+                        modifier = GlanceModifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Header: Category & Counter Status
+                        // Top Header: Type Pill & Subtle Tap Hint
                         Row(
                             modifier = GlanceModifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = item.category.titleArabic,
+                                text = "⟳ انقر للتبديل",
                                 style = TextStyle(
-                                    color = ColorProvider(Color(0xFF81C784)),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                    color = ColorProvider(accentColor.copy(alpha = 0.75f)),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Normal
                                 )
                             )
                             Spacer(modifier = GlanceModifier.defaultWeight())
                             Text(
-                                text = "$currentCount / ${item.targetCount}",
+                                text = item.type.labelArabic,
                                 style = TextStyle(
-                                    color = ColorProvider(Color(0xFFE8F5E9)),
-                                    fontSize = 13.sp,
+                                    color = ColorProvider(accentColor),
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             )
                         }
 
-                        Spacer(modifier = GlanceModifier.height(8.dp))
+                        Spacer(modifier = GlanceModifier.height(6.dp))
 
-                        // Zekr Arabic Text
+                        // Center: Main Arabic Text (Authentic Hadith / Ayah / Zikr)
                         Box(
                             modifier = GlanceModifier
                                 .defaultWeight()
@@ -97,44 +145,30 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                             Text(
                                 text = item.arabicText,
                                 style = TextStyle(
-                                    color = ColorProvider(Color.White),
-                                    fontSize = 17.sp,
+                                    color = ColorProvider(textColor),
+                                    fontSize = settings.fontSizeSp.sp,
                                     fontWeight = FontWeight.Medium,
                                     textAlign = TextAlign.Center
                                 )
                             )
                         }
 
-                        Spacer(modifier = GlanceModifier.height(8.dp))
+                        Spacer(modifier = GlanceModifier.height(4.dp))
 
-                        // Control Buttons Row
+                        // Footer: Exact Source & Authentication
                         Row(
                             modifier = GlanceModifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Button(
-                                text = "◀",
-                                onClick = actionRunCallback<PreviousZekrAction>(),
-                                modifier = GlanceModifier.width(44.dp).height(38.dp)
-                            )
-                            Spacer(modifier = GlanceModifier.width(8.dp))
-                            Button(
-                                text = "ذكر ($currentCount)",
-                                onClick = actionRunCallback<IncrementCountAction>(),
-                                modifier = GlanceModifier.defaultWeight().height(38.dp)
-                            )
-                            Spacer(modifier = GlanceModifier.width(8.dp))
-                            Button(
-                                text = "▶",
-                                onClick = actionRunCallback<NextZekrAction>(),
-                                modifier = GlanceModifier.width(44.dp).height(38.dp)
-                            )
-                            Spacer(modifier = GlanceModifier.width(6.dp))
-                            Button(
-                                text = "↺",
-                                onClick = actionRunCallback<ResetCountAction>(),
-                                modifier = GlanceModifier.width(36.dp).height(38.dp)
+                            Text(
+                                text = if (item.reference.isNotEmpty()) "${item.source} • ${item.reference}" else item.source,
+                                style = TextStyle(
+                                    color = ColorProvider(textColor.copy(alpha = 0.82f)),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    textAlign = TextAlign.Center
+                                )
                             )
                         }
                     }

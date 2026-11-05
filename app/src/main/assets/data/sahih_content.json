@@ -1,0 +1,202 @@
+[
+  {
+    "id": 1,
+    "arabicText": "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ ۚ لَّهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ",
+    "type": "QURAN_AYAH",
+    "source": "سورة البقرة: 255",
+    "reference": "آية الكرسي - أعظم آية في كتاب الله",
+    "category": "آيات الحفظ",
+    "repetition": 1,
+    "englishMeaning": "Allah - there is no deity except Him, the Ever-Living, the Sustainer of all existence."
+  },
+  {
+    "id": 2,
+    "arabicText": "وَإِذَا سَأَلَكَ عِبَادِي عَنِّي فَإِنِّي قَرِيبٌ ۖ أُجِيبُ دَعْوَةَ الدَّاعِ إِذَا دَعَانِ ۖ فَلْيَسْتَجِيبُوا لِي وَلْيُؤْمِنُوا بِي لَعَلَّهُمْ يَرْشُدُونَ",
+    "type": "QURAN_AYAH",
+    "source": "سورة البقرة: 186",
+    "reference": "الاستجابة والقرب الإلهي",
+    "category": "أدعية قرآنية",
+    "repetition": 1,
+    "englishMeaning": "And when My servants ask you concerning Me, indeed I am near. I respond to the invocation of the supplicant."
+  },
+  {
+    "id": 3,
+    "arabicText": "رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الْآخِرَةِ حَسَنَةً وَقِنَا عَذَابَ النَّارِ",
+    "type": "QURAN_AYAH",
+    "source": "سورة البقرة: 201",
+    "reference": "جامع خيري الدنيا والآخرة",
+    "category": "أدعية قرآنية",
+    "repetition": 1,
+    "englishMeaning": "Our Lord, give us in this world that which is good and in the Hereafter that which is good and protect us from the punishment of the Fire."
+  },
+  {
+    "id": 4,
+    "arabicText": "فَقُلْتُ اسْتَغْفِرُوا رَبَّكُمْ إِنَّهُ كَانَ غَفَّارًا • يُرْسِلِ السَّمَاءَ عَلَيْكُم مِّدْرَارًا • وَيُمْدِدْكُم بِأَمْوَالٍ وَبَنِينَ وَيَجْعَل لَّكُمْ جَنَّاتٍ وَيَجْعَل لَّكُمْ أَنْهَارًا",
+    "type": "QURAN_AYAH",
+    "source": "سورة نوح: 10-12",
+    "reference": "فضل وثمرات الاستغفار",
+    "category": "الاستغفار",
+    "repetition": 1,
+    "englishMeaning": "Ask forgiveness of your Lord. Indeed, He is ever a Perpetual Forgiver."
+  },
+  {
+    "id": 5,
+    "arabicText": "الَّذِينَ آمَنُوا وَتَطْمَئِنُّ قُلُوبُهُم بِذِكْرِ اللَّهِ ۗ أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ",
+    "type": "QURAN_AYAH",
+    "source": "سورة الرعد: 28",
+    "reference": "طمأنينة القلوب بذكر الله",
+    "category": "فضل الذكر",
+    "repetition": 1,
+    "englishMeaning": "Those who have believed and whose hearts are assured by the remembrance of Allah. Unquestionably, by the remembrance of Allah hearts are assured."
+  },
+  {
+    "id": 6,
+    "arabicText": "حَسْبِيَ اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ ۖ عَلَيْهِ تَوَكَّلْتُ ۖ وَهُوَ رَبُّ الْعَرْشِ الْعَظِيمِ",
+    "type": "QURAN_AYAH",
+    "source": "سورة التوبة: 129",
+    "reference": "التوكل والكفاية",
+    "category": "أذكار الصباح والمساء",
+    "repetition": 7,
+    "englishMeaning": "Sufficient for me is Allah; there is no deity except Him. On Him I have relied, and He is the Lord of the Great Throne."
+  },
+  {
+    "id": 7,
+    "arabicText": "وَمَن يَتَّقِ اللَّهَ يَجْعَل لَّهُ مَخْرَجًا • وَيَرْزُقْهُ مِنْ حَيْثُ لَا يَحْتَسِبُ ۚ وَمَن يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ",
+    "type": "QURAN_AYAH",
+    "source": "سورة الطلاق: 2-3",
+    "reference": "التقوى والتوكل والفرج",
+    "category": "التوكل والفرج",
+    "repetition": 1,
+    "englishMeaning": "And whoever fears Allah - He will make for him a way out and will provide for him from where he does not expect."
+  },
+  {
+    "id": 8,
+    "arabicText": "كَلِمَتَانِ خَفِيفَتَانِ عَلَى اللِّسَانِ، ثَقِيلَتَانِ فِي الْمِيزَانِ، حَبِيبَتَانِ إِلَى الرَّحْمَنِ: سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ",
+    "type": "SAHIH_HADITH",
+    "source": "صحيح البخاري: 6406 | صحيح مسلم: 2694",
+    "reference": "كتاب الدعوات • باب فضل التسبيح",
+    "category": "التسبيح والتحميد",
+    "repetition": 1,
+    "englishMeaning": "Two words are light on the tongue, heavy in the scale, and beloved to the Most Merciful: Subhan Allah wa bihamdihi, Subhan Allah al-Azim."
+  },
+  {
+    "id": 9,
+    "arabicText": "مَثَلُ الَّذِي يَذْكُرُ رَبَّهُ وَالَّذِي لا يَذْكُرُ رَبَّهُ، مَثَلُ الحَيِّ وَالمَيِّتِ",
+    "type": "SAHIH_HADITH",
+    "source": "صحيح البخاري: 6407",
+    "reference": "كتاب الدعوات • باب فضل ذكر الله عز وجل",
+    "category": "فضل الذكر",
+    "repetition": 1,
+    "englishMeaning": "The example of the one who celebrates the praise of his Lord in comparison to the one who does not is that of a living versus a dead."
+  },
+  {
+    "id": 10,
+    "arabicText": "مَنْ قَالَ: سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، فِي يَوْمٍ مِائَةَ مَرَّةٍ، حُطَّتْ خَطَايَاهُ وَإِنْ كَانَتْ مِثْلَ زَبَدِ الْبَحْرِ",
+    "type": "SAHIH_HADITH",
+    "source": "صحيح البخاري: 6405 | صحيح مسلم: 2691",
+    "reference": "كتاب الذكر والدعاء",
+    "category": "التسبيح ومغفرة الذنوب",
+    "repetition": 100,
+    "englishMeaning": "Whoever says 'Subhan Allah wa bihamdihi' a hundred times a day, his sins will be forgiven even if they were like the foam of the sea."
+  },
+  {
+    "id": 11,
+    "arabicText": "أَحَبُّ الْكَلاَمِ إِلَى اللَّهِ أَرْبَعٌ: سُبْحَانَ اللَّهِ، وَالْحَمْدُ لِلَّهِ، وَلاَ إِلَهَ إِلاَّ اللَّهُ، وَاللَّهُ أَكْبَرُ، لاَ يَضُرُّكَ بِأَيِّهِنَّ بَدَأْتَ",
+    "type": "SAHIH_HADITH",
+    "source": "صحيح مسلم: 2137",
+    "reference": "كتاب الآداب",
+    "category": "الباقيات الصالحات",
+    "repetition": 1,
+    "englishMeaning": "The most beloved words to Allah are four: Subhan Allah, Al-Hamdu lillah, La ilaha illa Allah, and Allahu Akbar."
+  },
+  {
+    "id": 12,
+    "arabicText": "مَنْ صَلَّى عَلَيَّ وَاحِدَةً صَلَّى اللَّهُ عَلَيْهِ عَشْرًا",
+    "type": "SAHIH_HADITH",
+    "source": "صحيح مسلم: 408",
+    "reference": "كتاب الصلاة • باب الصلاة على النبي ﷺ",
+    "category": "الصلاة على النبي",
+    "repetition": 10,
+    "englishMeaning": "Whoever sends blessings upon me once, Allah will send blessings upon him tenfold."
+  },
+  {
+    "id": 13,
+    "arabicText": "يَا عَبْدَ اللَّهِ بْنَ قَيْسٍ، أَلا أَدُلُّكَ عَلَى كَنْزٍ مِنْ كُنُوزِ الْجَنَّةِ؟ قُلْتُ: بَلَى يَا رَسُولَ اللَّهِ، قَالَ: قُلْ: لا حَوْلَ وَلا قُوَّةَ إِلا بِاللَّهِ",
+    "type": "SAHIH_HADITH",
+    "source": "صحيح البخاري: 6384 | صحيح مسلم: 2704",
+    "reference": "كتاب الدعوات",
+    "category": "كنوز الجنة",
+    "repetition": 1,
+    "englishMeaning": "Shall I not guide you to a treasure from the treasures of Paradise? Say: La hawla wa la quwwata illa billah."
+  },
+  {
+    "id": 14,
+    "arabicText": "مَا مِنْ عَبْدٍ يَقُولُ فِي صَبَاحِ كُلِّ يَوْمٍ وَمَسَاءِ كُلِّ لَيْلَةٍ: بِسْمِ اللَّهِ الَّذِي لَا يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الْأَرْضِ وَلَا فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ، ثَلَاثَ مَرَّاتٍ، لَمْ يَضُرَّهُ شَيْءٌ",
+    "type": "SAHIH_HADITH",
+    "source": "سنن الترمذي: 3388 (حسن صحيح) | أبو داود: 5088",
+    "reference": "أذكار الصباح والمساء للوقاية والحفظ",
+    "category": "الحفظ والوقاية",
+    "repetition": 3,
+    "englishMeaning": "In the Name of Allah with Whose Name nothing can cause harm in the earth nor in the heavens, and He is the All-Hearing, the All-Knowing."
+  },
+  {
+    "id": 15,
+    "arabicText": "اللَّهُمَّ أَنْتَ رَبِّي لاَ إِلَهَ إِلاَّ أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ، وَأَنَا عَلَى عَهْدِكَ وَوَعْدِكَ مَا اسْتَطَعْتُ، أَعُوذُ بِكَ مِنْ شَرِّ مَا صَنَعْتُ، أَبُوءُ لَكَ بِنِعْمَتِكَ عَلَيَّ، وَأَبُوءُ لَكَ بِذَنْبِي، فَاغْفِرْ لِي فَإِنَّهُ لاَ يَغْفِرُ الذُّنُوبَ إِلاَّ أَنْتَ",
+    "type": "AUTHENTIC_ZEKR",
+    "source": "صحيح البخاري: 6306",
+    "reference": "سيد الاستغفار",
+    "category": "الاستغفار",
+    "repetition": 1,
+    "englishMeaning": "O Allah, You are my Lord, none has the right to be worshiped but You. You created me and I am Your servant..."
+  },
+  {
+    "id": 16,
+    "arabicText": "أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ",
+    "type": "AUTHENTIC_ZEKR",
+    "source": "صحيح مسلم: 2723",
+    "reference": "أذكار الصباح",
+    "category": "أذكار الصباح",
+    "repetition": 1,
+    "englishMeaning": "We have reached the morning and sovereignty belongs to Allah, and all praise is due to Allah."
+  },
+  {
+    "id": 17,
+    "arabicText": "أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ",
+    "type": "AUTHENTIC_ZEKR",
+    "source": "صحيح مسلم: 2723",
+    "reference": "أذكار المساء",
+    "category": "أذكار المساء",
+    "repetition": 1,
+    "englishMeaning": "We have reached the evening and sovereignty belongs to Allah, and all praise is due to Allah."
+  },
+  {
+    "id": 18,
+    "arabicText": "رَضِيتُ بِاللَّهِ رَبًّا، وَبِالْإِسْلَامِ دِينًا، وَبِمُحَمَّدٍ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ نَبِيًّا",
+    "type": "AUTHENTIC_ZEKR",
+    "source": "صحيح مسلم: 34",
+    "reference": "من قالها وجبت له الجنة",
+    "category": "أذكار الصباح والمساء",
+    "repetition": 3,
+    "englishMeaning": "I am pleased with Allah as my Lord, with Islam as my religion, and with Muhammad (peace be upon him) as my Prophet."
+  },
+  {
+    "id": 19,
+    "arabicText": "يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ، أَصْلِحْ لِي شَأْنِي كُلَّهُ، وَلَا تَكِلْنِي إِلَى نَفْسِي طَرْفَةَ عَيْنٍ",
+    "type": "AUTHENTIC_ZEKR",
+    "source": "المستدرك للحاكم (صحيح على شرط مسلم) | السلسلة الصحيحة: 227",
+    "reference": "دعاء الكرب وصباح ومساء",
+    "category": "جوامع الدعاء",
+    "repetition": 1,
+    "englishMeaning": "O Ever-Living, O Sustainer, by Your mercy I seek assistance; rectify for me all of my affairs and do not leave me to myself, even for the blink of an eye."
+  },
+  {
+    "id": 20,
+    "arabicText": "اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَافِيَةَ فِي الدُّنْيَا وَالْآخِرَةِ، اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَفْوَ وَالْعَافِيَةَ فِي دِينِي وَدُنْيَايَ وَأَهْلِي وَمَالِي",
+    "type": "AUTHENTIC_ZEKR",
+    "source": "سنن أبي داود: 5074 (صحيح) | سنن ابن ماجه: 3871",
+    "reference": "دعاء العافية في كل صباح ومساء",
+    "category": "العافية والحفظ",
+    "repetition": 1,
+    "englishMeaning": "O Allah, I ask You for well-being in this world and the Hereafter..."
+  }
+]

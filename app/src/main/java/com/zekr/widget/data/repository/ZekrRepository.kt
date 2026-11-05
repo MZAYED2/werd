@@ -1,82 +1,84 @@
 package com.zekr.widget.data.repository
 
-import com.zekr.widget.data.model.ZekrCategory
-import com.zekr.widget.data.model.ZekrItem
+import android.content.Context
+import com.zekr.widget.data.model.ContentType
+import com.zekr.widget.data.model.ZekrEntity
+import kotlinx.serialization.json.Json
+import java.io.InputStreamReader
+import kotlin.random.Random
 
 object ZekrRepository {
 
-    val defaultItems: List<ZekrItem> = listOf(
-        ZekrItem(
+    private val json = Json { ignoreUnknownKeys = true }
+    private var cachedItems: List<ZekrEntity>? = null
+
+    fun getItems(context: Context): List<ZekrEntity> {
+        cachedItems?.let { return it }
+
+        return try {
+            context.assets.open("data/sahih_content.json").use { stream ->
+                val reader = InputStreamReader(stream)
+                val content = reader.readText()
+                val parsed = json.decodeFromString<List<ZekrEntity>>(content)
+                cachedItems = parsed
+                parsed
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            fallbackItems
+        }
+    }
+
+    fun getById(context: Context, id: Int): ZekrEntity {
+        val items = getItems(context)
+        return items.find { it.id == id } ?: items.firstOrNull() ?: fallbackItems.first()
+    }
+
+    fun getRandomItem(
+        context: Context,
+        includeQuran: Boolean = true,
+        includeHadith: Boolean = true,
+        includeAzkar: Boolean = true,
+        currentId: Int? = null
+    ): ZekrEntity {
+        val items = getItems(context)
+        val filtered = items.filter { item ->
+            when (item.type) {
+                ContentType.QURAN_AYAH -> includeQuran
+                ContentType.SAHIH_HADITH -> includeHadith
+                ContentType.AUTHENTIC_ZEKR -> includeAzkar
+            }
+        }
+
+        val pool = if (filtered.isEmpty()) items else filtered
+
+        val candidates = if (pool.size > 1 && currentId != null) {
+            pool.filter { it.id != currentId }
+        } else {
+            pool
+        }
+
+        return candidates[Random.nextInt(candidates.size)]
+    }
+
+    private val fallbackItems = listOf(
+        ZekrEntity(
             id = 1,
             arabicText = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ ، سُبْحَانَ اللَّهِ الْعَظِيمِ",
-            targetCount = 100,
-            reference = "متفق عليه",
-            category = ZekrCategory.TASBIH,
+            type = ContentType.SAHIH_HADITH,
+            source = "صحيح البخاري: 6406",
+            reference = "كلمتان خفيفتان على اللسان ثقيلتان في الميزان",
+            category = "التسبيح",
             englishMeaning = "Glory be to Allah and His praise, Glory be to Allah the Great"
         ),
-        ZekrItem(
+        ZekrEntity(
             id = 2,
-            arabicText = "لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ",
-            targetCount = 100,
-            reference = "كنز من كنوز الجنة",
-            category = ZekrCategory.DAILY,
-            englishMeaning = "There is no power nor strength except with Allah, the Most High, the Supreme"
-        ),
-        ZekrItem(
-            id = 3,
-            arabicText = "أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ وَأَتُوبُ إِلَيْهِ",
-            targetCount = 100,
-            reference = "سنة نبوية",
-            category = ZekrCategory.TASBIH,
-            englishMeaning = "I seek forgiveness of Allah the Great and repent to Him"
-        ),
-        ZekrItem(
-            id = 4,
-            arabicText = "اللَّهُمَّ صَلِّ وَسَلِّمْ عَلَى نَبِيِّنَا مُحَمَّدٍ",
-            targetCount = 10,
-            reference = "من صلى علي صلاة صلى الله عليه بها عشرا",
-            category = ZekrCategory.DAILY,
-            englishMeaning = "O Allah, send blessings and peace upon our Prophet Muhammad"
-        ),
-        ZekrItem(
-            id = 5,
-            arabicText = "أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ وَالْحَمْدُ لِلَّهِ، لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ",
-            targetCount = 1,
-            reference = "أذكار الصباح",
-            category = ZekrCategory.MORNING,
-            englishMeaning = "We have entered a new morning and with it upon the whole kingdom belongs to Allah"
-        ),
-        ZekrItem(
-            id = 6,
-            arabicText = "أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ وَالْحَمْدُ لِلَّهِ، لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ",
-            targetCount = 1,
-            reference = "أذكار المساء",
-            category = ZekrCategory.EVENING,
-            englishMeaning = "We have reached the evening and at this very time unto Allah belongs all sovereignty"
-        ),
-        ZekrItem(
-            id = 7,
-            arabicText = "رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الْآخِرَةِ حَسَنَةً وَقِنَا عَذَابَ النَّارِ",
-            targetCount = 3,
-            reference = "سورة البقرة: 201",
-            category = ZekrCategory.QURANIC_DUA,
-            englishMeaning = "Our Lord, give us in this world that which is good and in the Hereafter that which is good"
+            arabicText = "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ",
+            type = ContentType.QURAN_AYAH,
+            source = "سورة البقرة: 255",
+            reference = "آية الكرسي",
+            category = "آيات الحفظ",
+            englishMeaning = "Allah - there is no deity except Him, the Ever-Living, the Sustainer of all existence."
         )
     )
-
-    fun getById(id: Int): ZekrItem {
-        return defaultItems.find { it.id == id } ?: defaultItems.first()
-    }
-
-    fun getNextId(currentId: Int): Int {
-        val currentIndex = defaultItems.indexOfFirst { it.id == currentId }
-        val nextIndex = if (currentIndex == -1 || currentIndex == defaultItems.lastIndex) 0 else currentIndex + 1
-        return defaultItems[nextIndex].id
-    }
-
-    fun getPreviousId(currentId: Int): Int {
-        val currentIndex = defaultItems.indexOfFirst { it.id == currentId }
-        val prevIndex = if (currentIndex <= 0) defaultItems.lastIndex else currentIndex - 1
-        return defaultItems[prevIndex].id
-    }
 }
