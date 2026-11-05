@@ -93,7 +93,7 @@ fun HomeScreen(
     fun updateAndSync(newSettings: WidgetSettings) {
         scope.launch {
             prefRepo.updateSettings(newSettings)
-            ZekrGlanceWidget().updateAll(context)
+            ZekrGlanceWidget.updateAllWidgets(context, newSettings)
         }
     }
 
@@ -110,7 +110,13 @@ fun HomeScreen(
                 actions = {
                     if (isWidgetConfigMode) {
                         androidx.compose.material3.Button(
-                            onClick = onSaveAndClose,
+                            onClick = {
+                                scope.launch {
+                                    prefRepo.updateSettings(settings)
+                                    ZekrGlanceWidget.updateAllWidgets(context, settings)
+                                    onSaveAndClose()
+                                }
+                            },
                             modifier = Modifier.padding(end = 8.dp)
                         ) {
                             Text("تم وحفظ", fontWeight = FontWeight.Bold)
@@ -155,7 +161,7 @@ fun HomeScreen(
                         previewItemId = next.id
                         scope.launch {
                             prefRepo.setCurrentItemId(next.id)
-                            ZekrGlanceWidget().updateAll(context)
+                            ZekrGlanceWidget.updateAllWidgets(context, settings, next.id)
                         }
                     }
                 )
@@ -176,8 +182,8 @@ fun HomeScreen(
                         val isSelected = pattern == settings.pattern
                         Card(
                             modifier = Modifier
-                                .width(120.dp)
-                                .height(64.dp)
+                                .width(135.dp)
+                                .height(68.dp)
                                 .clickable {
                                     updateAndSync(settings.copy(pattern = pattern))
                                 },
@@ -202,6 +208,56 @@ fun HomeScreen(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Pattern Visibility (Opacity) Slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "وضوح النقش الإسلامي",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "${(settings.patternOpacity * 100).toInt()}%",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Slider(
+                    value = settings.patternOpacity,
+                    onValueChange = { newOpacity ->
+                        updateAndSync(settings.copy(patternOpacity = newOpacity))
+                    },
+                    valueRange = 0.05f..0.85f
+                )
+
+                // Pattern Sizing (Scale) Slider
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "حجم وتكبير النقش",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "${String.format("%.1f", settings.patternScale)}x",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Slider(
+                    value = settings.patternScale,
+                    onValueChange = { newScale ->
+                        updateAndSync(settings.copy(patternScale = newScale))
+                    },
+                    valueRange = 0.5f..2.2f
+                )
             }
 
             // Glass Colors & Presets Section
@@ -398,6 +454,8 @@ fun LiveGlassWidgetPreview(
             colorPreset = settings.colorPreset,
             opacity = settings.glassOpacity,
             pattern = settings.pattern,
+            patternOpacity = settings.patternOpacity,
+            patternScale = settings.patternScale,
             cornerRadius = 56f
         )
     }

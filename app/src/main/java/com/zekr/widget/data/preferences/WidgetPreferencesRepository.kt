@@ -21,6 +21,8 @@ object WidgetPreferenceKeys {
     val KEY_COLOR_PRESET = stringPreferencesKey("pref_color_preset")
     val KEY_GLASS_OPACITY = floatPreferencesKey("pref_glass_opacity")
     val KEY_PATTERN = stringPreferencesKey("pref_pattern")
+    val KEY_PATTERN_OPACITY = floatPreferencesKey("pref_pattern_opacity")
+    val KEY_PATTERN_SCALE = floatPreferencesKey("pref_pattern_scale")
     val KEY_INCLUDE_QURAN = booleanPreferencesKey("pref_include_quran")
     val KEY_INCLUDE_HADITH = booleanPreferencesKey("pref_include_hadith")
     val KEY_INCLUDE_AZKAR = booleanPreferencesKey("pref_include_azkar")
@@ -41,8 +43,11 @@ class WidgetPreferencesRepository(private val context: Context) {
 
         val opacity = prefs[WidgetPreferenceKeys.KEY_GLASS_OPACITY] ?: 0.35f
 
-        val patternStr = prefs[WidgetPreferenceKeys.KEY_PATTERN] ?: PatternType.ARABESQUE.id
-        val pattern = PatternType.values().find { it.id == patternStr } ?: PatternType.ARABESQUE
+        val patternStr = prefs[WidgetPreferenceKeys.KEY_PATTERN] ?: PatternType.STAR_OCTAGRAM.id
+        val pattern = PatternType.values().find { it.id == patternStr } ?: PatternType.STAR_OCTAGRAM
+
+        val patternOpacity = prefs[WidgetPreferenceKeys.KEY_PATTERN_OPACITY] ?: 0.25f
+        val patternScale = prefs[WidgetPreferenceKeys.KEY_PATTERN_SCALE] ?: 1.0f
 
         val includeQuran = prefs[WidgetPreferenceKeys.KEY_INCLUDE_QURAN] ?: true
         val includeHadith = prefs[WidgetPreferenceKeys.KEY_INCLUDE_HADITH] ?: true
@@ -55,6 +60,8 @@ class WidgetPreferencesRepository(private val context: Context) {
             colorPreset = colorPreset,
             glassOpacity = opacity,
             pattern = pattern,
+            patternOpacity = patternOpacity,
+            patternScale = patternScale,
             includeQuran = includeQuran,
             includeHadith = includeHadith,
             includeAzkar = includeAzkar,
@@ -77,6 +84,8 @@ class WidgetPreferencesRepository(private val context: Context) {
             prefs[WidgetPreferenceKeys.KEY_COLOR_PRESET] = settings.colorPreset.id
             prefs[WidgetPreferenceKeys.KEY_GLASS_OPACITY] = settings.glassOpacity
             prefs[WidgetPreferenceKeys.KEY_PATTERN] = settings.pattern.id
+            prefs[WidgetPreferenceKeys.KEY_PATTERN_OPACITY] = settings.patternOpacity
+            prefs[WidgetPreferenceKeys.KEY_PATTERN_SCALE] = settings.patternScale
             prefs[WidgetPreferenceKeys.KEY_INCLUDE_QURAN] = settings.includeQuran
             prefs[WidgetPreferenceKeys.KEY_INCLUDE_HADITH] = settings.includeHadith
             prefs[WidgetPreferenceKeys.KEY_INCLUDE_AZKAR] = settings.includeAzkar

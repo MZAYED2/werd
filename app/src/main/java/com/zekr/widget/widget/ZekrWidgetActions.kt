@@ -31,6 +31,13 @@ class ShuffleWidgetAction : ActionCallback {
 
         updateAppWidgetState(context, glanceId) { prefs ->
             prefs[KEY_ZEKR_ID] = nextItem.id
+            prefs[KEY_COLOR_PRESET] = settings.colorPreset.id
+            prefs[KEY_GLASS_OPACITY] = settings.glassOpacity
+            prefs[KEY_PATTERN] = settings.pattern.id
+            prefs[KEY_PATTERN_OPACITY] = settings.patternOpacity
+            prefs[KEY_PATTERN_SCALE] = settings.patternScale
+            prefs[KEY_FONT_SIZE] = settings.fontSizeSp
+            prefs[KEY_UPDATE_VERSION] = System.currentTimeMillis()
         }
         ZekrGlanceWidget().update(context, glanceId)
     }

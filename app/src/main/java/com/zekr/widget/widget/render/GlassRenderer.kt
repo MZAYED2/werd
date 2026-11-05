@@ -18,6 +18,8 @@ object GlassRenderer {
         colorPreset: GlassColorPreset,
         opacity: Float,
         pattern: PatternType,
+        patternOpacity: Float = 0.25f,
+        patternScale: Float = 1.0f,
         cornerRadius: Float = 54f
     ): Bitmap {
         val safeW = if (width <= 0) 600 else width
@@ -58,20 +60,21 @@ object GlassRenderer {
         // Draw Frosted Body
         canvas.drawRoundRect(rect, cornerRadius, cornerRadius, glassPaint)
 
-        // Draw Pattern Overlay
+        // Draw Pattern Overlay with configured patternOpacity and patternScale
         val patternColor = if (colorPreset == GlassColorPreset.FROSTED_WHITE) {
             Color.BLACK
         } else {
             Color.WHITE
         }
-        val patternAlpha = if (colorPreset == GlassColorPreset.FROSTED_WHITE) 22 else 32
+        val patternAlpha = (patternOpacity.coerceIn(0.04f, 0.95f) * 255).toInt()
         PatternDrawables.drawPattern(
             canvas = canvas,
             pattern = pattern,
             width = safeW.toFloat(),
             height = safeH.toFloat(),
             patternColor = patternColor,
-            alpha = patternAlpha
+            alpha = patternAlpha,
+            scale = patternScale
         )
 
         // Draw Subtle 1.2dp Glass Highlight Border (Glassmorphism Edge)

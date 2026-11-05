@@ -23,10 +23,15 @@ enum class GlassColorPreset(
 
 enum class PatternType(val id: String, val titleArabic: String) {
     NONE("NONE", "بدون نقوش"),
-    ARABESQUE("ARABESQUE", "أرابيسك إسلامي"),
     STAR_OCTAGRAM("STAR_OCTAGRAM", "نجمة ثمانية"),
+    STAR_TWELVE("STAR_TWELVE", "نجمة اثنا عشرية"),
+    ARABESQUE("ARABESQUE", "أرابيسك إسلامي"),
+    ISLAMIC_ARCH("ISLAMIC_ARCH", "محراب وأقواس"),
+    MOROCCAN_ZELLIGE("MOROCCAN_ZELLIGE", "زليج مغربي"),
+    DIAMOND_GIRIH("DIAMOND_GIRIH", "معينات جيري"),
     FLORAL_DAMASK("FLORAL_DAMASK", "زخرفة نباتية"),
     GEOMETRIC_HEX("GEOMETRIC_HEX", "هندسي مسدس"),
+    CRESCENT_GEOMETRY("CRESCENT_GEOMETRY", "هلال إسلامي"),
     MINIMAL_DOTS("MINIMAL_DOTS", "نقاط هادئة")
 }
 
@@ -35,7 +40,9 @@ data class WidgetSettings(
     val fontSizeSp: Int = 18,
     val colorPreset: GlassColorPreset = GlassColorPreset.EMERALD_SAGE,
     val glassOpacity: Float = 0.35f,
-    val pattern: PatternType = PatternType.ARABESQUE,
+    val pattern: PatternType = PatternType.STAR_OCTAGRAM,
+    val patternOpacity: Float = 0.25f,
+    val patternScale: Float = 1.0f,
     val includeQuran: Boolean = true,
     val includeHadith: Boolean = true,
     val includeAzkar: Boolean = true,
