@@ -67,7 +67,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    isWidgetConfigMode: Boolean = false,
+    onSaveAndClose: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefRepo = remember { WidgetPreferencesRepository(context) }
@@ -99,10 +102,20 @@ fun HomeScreen() {
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = "استوديو ويدجت الأذكار والصحيحين",
+                        text = if (isWidgetConfigMode) "تعديل الويدجت" else "استوديو ويدجت الأذكار والصحيحين",
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
+                },
+                actions = {
+                    if (isWidgetConfigMode) {
+                        androidx.compose.material3.Button(
+                            onClick = onSaveAndClose,
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Text("تم وحفظ", fontWeight = FontWeight.Bold)
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,

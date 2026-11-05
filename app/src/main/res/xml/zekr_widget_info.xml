@@ -9,4 +9,6 @@
     android:minResizeHeight="70dp"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
+    android:configure="com.zekr.widget.MainActivity"
+    android:widgetFeatures="reconfigurable|configuration_optional"
     android:updatePeriodMillis="0" />
