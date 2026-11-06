@@ -1,0 +1,43 @@
+---
+description: Bump werd version on every feature and use Conventional Commits
+alwaysApply: true
+---
+
+# Version bumps & Conventional Commits
+
+## When to bump
+
+After finishing a **user-facing feature** (or a release the user will install), bump the app version in [`app/build.gradle.kts`](app/build.gradle.kts):
+
+- `appVersionCode` → +1 (integer, never reuse)
+- `appVersionName` → next semver for the change
+  - **feat** → minor (`1.1` → `1.2`)
+  - **fix** / polish → patch (`1.1` → `1.1.1` once on `x.y.z`; if still `x.y`, bump minor or switch to `x.y.z`)
+  - **breaking** product change → major (`1.x` → `2.0`)
+
+Do **not** bump for pure docs, rules, refactors with no behavior change, or WIP that is not shippable yet.
+
+Release APKs must keep the naming from `base.archivesName`: `werd-<versionName>-<buildType>.apk`.
+
+## Commits
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) to match this repo (`feat:`, `fix:`, …):
+
+```
+<type>(optional-scope): <imperative summary>
+```
+
+Common types: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `build`, `ci`.
+
+Examples from this repo:
+
+- `feat: enable reconfigurable widget with long-press edit menu`
+- `fix: make glance widget state fully reactive to clicks`
+- `chore(release): bump version to 1.1`
+
+When a feature lands with a version bump, either:
+
+1. Include the bump in the same `feat:` / `fix:` commit, or
+2. Follow with `chore(release): bump version to <versionName>`
+
+Prefer (1) when the bump is only for that feature.
