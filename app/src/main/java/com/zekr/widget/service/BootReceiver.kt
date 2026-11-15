@@ -18,6 +18,11 @@ class BootReceiver : BroadcastReceiver() {
                 if (settings.serviceEnabled) {
                     ScreenLockService.start(appContext)
                 }
+                StyleRotationScheduler.sync(
+                    context = appContext,
+                    enabled = settings.styleRotationEnabled,
+                    hours = settings.styleRotationHours
+                )
             }
         }
     }

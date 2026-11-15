@@ -3,9 +3,7 @@ package com.zekr.widget.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.glance.appwidget.updateAll
 import com.zekr.widget.data.preferences.WidgetPreferencesRepository
-import com.zekr.widget.data.repository.ZekrRepository
 import com.zekr.widget.widget.ZekrGlanceWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,25 +32,18 @@ class ScreenLockReceiver : BroadcastReceiver() {
         lastTriggerTime = now
 
         val appContext = context.applicationContext
+        val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val prefRepo = WidgetPreferencesRepository(appContext)
                 val settings = prefRepo.getSettings()
-                if (!settings.serviceEnabled) return@launch
-
-                val currentId = prefRepo.getCurrentItemId()
-                val nextItem = ZekrRepository.getRandomItem(
-                    context = appContext,
-                    includeQuran = settings.includeQuran,
-                    includeHadith = settings.includeHadith,
-                    includeAzkar = settings.includeAzkar,
-                    currentId = currentId
-                )
-
-                prefRepo.setCurrentItemId(nextItem.id)
-                ZekrGlanceWidget().updateAll(appContext)
+                if (settings.serviceEnabled) {
+                    ZekrGlanceWidget.shuffleToNext(appContext)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
+            } finally {
+                pendingResult.finish()
             }
         }
     }

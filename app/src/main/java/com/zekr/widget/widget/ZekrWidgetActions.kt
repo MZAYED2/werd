@@ -32,7 +32,12 @@ class ShuffleWidgetAction : ActionCallback {
         updateAppWidgetState(context, glanceId) { prefs ->
             prefs[KEY_ZEKR_ID] = nextItem.id
             prefs[KEY_COLOR_PRESET] = settings.colorPreset.id
+            prefs[KEY_IS_GRADIENT] = settings.isGradient
+            prefs[KEY_PRIMARY_COLOR] = settings.primaryColor
+            prefs[KEY_SECONDARY_COLOR] = settings.secondaryColor
+            prefs[KEY_GRADIENT_DIRECTION] = settings.gradientDirection.id
             prefs[KEY_GLASS_OPACITY] = settings.glassOpacity
+            prefs[KEY_BLUR_GRADE] = settings.blurGrade
             prefs[KEY_PATTERN] = settings.pattern.id
             prefs[KEY_PATTERN_OPACITY] = settings.patternOpacity
             prefs[KEY_PATTERN_SCALE] = settings.patternScale

@@ -16,8 +16,8 @@ val keystoreProperties = Properties().apply {
 }
 
 val appReleaseName = "werd"
-val appVersionCode = 2
-val appVersionName = "1.1"
+val appVersionCode = 3
+val appVersionName = "1.2"
 
 android {
     namespace = "com.zekr.widget"

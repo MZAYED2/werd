@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            ZekrWidgetTheme {
+            ZekrWidgetTheme(darkTheme = true, dynamicColor = false) {
                 HomeScreen(
                     isWidgetConfigMode = isWidgetConfigMode,
                     onSaveAndClose = {
