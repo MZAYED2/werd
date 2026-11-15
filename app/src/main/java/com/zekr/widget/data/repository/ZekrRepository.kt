@@ -32,6 +32,8 @@ object ZekrRepository {
     private const val CATEGORY_PROTECTION_AYAT = "آيات الحفظ"
     private const val CATEGORY_PROTECTION_HADITH = "الحفظ والوقاية"
 
+    private val ARABIC_DIACRITICS_REGEX = Regex("[\u064B-\u065F\u0670\u06D6-\u06ED]")
+
     fun getItems(context: Context): List<ZekrEntity> {
         cachedItems?.let { return it }
 
@@ -49,8 +51,17 @@ object ZekrRepository {
         }
     }
 
-    fun getById(context: Context, id: Int): ZekrEntity {
-        val items = getItems(context)
+    fun getAllItems(context: Context, customItems: List<ZekrEntity> = emptyList()): List<ZekrEntity> {
+        val builtIn = getItems(context)
+        return if (customItems.isEmpty()) builtIn else customItems + builtIn
+    }
+
+    fun getById(
+        context: Context,
+        id: Int,
+        customItems: List<ZekrEntity> = emptyList()
+    ): ZekrEntity {
+        val items = getAllItems(context, customItems)
         return items.find { it.id == id } ?: items.firstOrNull() ?: fallbackItems.first()
     }
 
@@ -96,8 +107,9 @@ object ZekrRepository {
     }
 
     /**
-     * Pure non-repeating deck selector with optional Time-of-Day smart context weighting.
+     * Pure non-repeating deck selector with optional Favorites-only filter and Time-of-Day smart context weighting.
      *
+     * - When [favoritesOnlyMode] is true and [favoriteIds] matches items, restricts the pool to favorites.
      * - Excludes items whose category belongs strictly to an opposite time of day when [smartTimeContextEnabled] is true.
      * - Uses [seenIds] as a persistent deck history so no item repeats until the entire active pool has been shown.
      * - When [smartTimeContextEnabled] is true and unseen time-priority items remain, weights selection toward
@@ -109,19 +121,32 @@ object ZekrRepository {
         includeHadith: Boolean = true,
         includeAzkar: Boolean = true,
         smartTimeContextEnabled: Boolean = true,
+        favoritesOnlyMode: Boolean = false,
+        favoriteIds: Set<Int> = emptySet(),
         currentId: Int? = null,
         seenIds: Set<Int> = emptySet(),
         hourOfDay: Int = currentHourOfDay(),
         random: Random = Random.Default
     ): NextZekrResult {
-        val baseItems = allItems.ifEmpty { fallbackItems }
+        val rawItems = allItems.ifEmpty { fallbackItems }
 
-        // 1. Filter by enabled content types
+        // 0. Optional Favorites-only filter
+        val baseItems = if (favoritesOnlyMode && favoriteIds.isNotEmpty()) {
+            rawItems.filter { it.id in favoriteIds }.ifEmpty { rawItems }
+        } else {
+            rawItems
+        }
+
+        // 1. Filter by enabled content types (if favoritesOnlyMode is active, keep all favorites regardless of category toggle if typeFiltered would be empty)
         val typeFiltered = baseItems.filter { item ->
-            when (item.type) {
-                ContentType.QURAN_AYAH -> includeQuran
-                ContentType.SAHIH_HADITH -> includeHadith
-                ContentType.AUTHENTIC_ZEKR -> includeAzkar
+            if (item.isCustom) {
+                true
+            } else {
+                when (item.type) {
+                    ContentType.QURAN_AYAH -> includeQuran
+                    ContentType.SAHIH_HADITH -> includeHadith
+                    ContentType.AUTHENTIC_ZEKR -> includeAzkar
+                }
             }
         }.ifEmpty { baseItems }
 
@@ -191,20 +216,52 @@ object ZekrRepository {
         includeHadith: Boolean = true,
         includeAzkar: Boolean = true,
         smartTimeContextEnabled: Boolean = true,
+        favoritesOnlyMode: Boolean = false,
+        favoriteIds: Set<Int> = emptySet(),
+        customItems: List<ZekrEntity> = emptyList(),
         currentId: Int? = null,
         seenIds: Set<Int> = emptySet(),
         hourOfDay: Int = currentHourOfDay()
     ): ZekrEntity {
         return selectNextFromPool(
-            allItems = getItems(context),
+            allItems = getAllItems(context, customItems),
             includeQuran = includeQuran,
             includeHadith = includeHadith,
             includeAzkar = includeAzkar,
             smartTimeContextEnabled = smartTimeContextEnabled,
+            favoritesOnlyMode = favoritesOnlyMode,
+            favoriteIds = favoriteIds,
             currentId = currentId,
             seenIds = seenIds,
             hourOfDay = hourOfDay
         ).item
+    }
+
+    fun normalizeArabicForSearch(text: String): String {
+        return ARABIC_DIACRITICS_REGEX.replace(text, "")
+            .replace('أ', 'ا')
+            .replace('إ', 'ا')
+            .replace('آ', 'ا')
+            .replace('ى', 'ي')
+            .replace('ة', 'ه')
+            .trim()
+            .lowercase()
+    }
+
+    fun matchesSearch(item: ZekrEntity, query: String): Boolean {
+        val normQuery = normalizeArabicForSearch(query)
+        if (normQuery.isEmpty()) return true
+        return normalizeArabicForSearch(item.arabicText).contains(normQuery) ||
+            normalizeArabicForSearch(item.source).contains(normQuery) ||
+            normalizeArabicForSearch(item.reference).contains(normQuery) ||
+            normalizeArabicForSearch(item.category).contains(normQuery)
+    }
+
+    fun toArabicDigits(number: Int): String {
+        val digits = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
+        return number.toString().map { ch ->
+            if (ch in '0'..'9') digits[ch - '0'] else ch
+        }.joinToString("")
     }
 
     private val fallbackItems = listOf(

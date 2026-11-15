@@ -129,6 +129,7 @@ data class WidgetSettings(
     val includeQuran: Boolean = true,
     val includeHadith: Boolean = true,
     val includeAzkar: Boolean = true,
+    val favoritesOnlyMode: Boolean = false,
     val smartTimeContextEnabled: Boolean = true,
     val serviceEnabled: Boolean = true,
     /** When true, cycle pattern + background every [styleRotationHours] hours. */

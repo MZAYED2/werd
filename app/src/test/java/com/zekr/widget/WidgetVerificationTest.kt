@@ -482,4 +482,152 @@ class WidgetVerificationTest {
             )
         )
     }
+
+    @Test
+    fun testFavoritesOnlyModeAndCustomItemsPoolFiltering() {
+        val items = listOf(
+            ZekrEntity(1, "آية", ContentType.QURAN_AYAH, "البقرة", "آية"),
+            ZekrEntity(2, "حديث", ContentType.SAHIH_HADITH, "البخاري", "باب"),
+            ZekrEntity(10_000, "دعاء خاص", ContentType.AUTHENTIC_ZEKR, "ذكري الخاص", "", isCustom = true)
+        )
+
+        val favIds = setOf(2, 10_000)
+        var seen = emptySet<Int>()
+        val picked = mutableSetOf<Int>()
+        repeat(6) {
+            val res = com.zekr.widget.data.repository.ZekrRepository.selectNextFromPool(
+                allItems = items,
+                smartTimeContextEnabled = false,
+                favoritesOnlyMode = true,
+                favoriteIds = favIds,
+                seenIds = seen
+            )
+            seen = res.updatedSeenIds
+            picked.add(res.item.id)
+        }
+        assertEquals("Favorites-only mode must only pick from favoriteIds", favIds, picked)
+
+        // Fallback when favoritesOnlyMode is true but favoriteIds is empty
+        val fallbackRes = com.zekr.widget.data.repository.ZekrRepository.selectNextFromPool(
+            allItems = items,
+            smartTimeContextEnabled = false,
+            favoritesOnlyMode = true,
+            favoriteIds = emptySet()
+        )
+        assertTrue(fallbackRes.item.id in setOf(1, 2, 10_000))
+    }
+
+    @Test
+    fun testArabicSearchNormalizationAndArabicDigits() {
+        val item = ZekrEntity(
+            id = 5,
+            arabicText = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ",
+            type = ContentType.AUTHENTIC_ZEKR,
+            source = "صحيح مسلم: 2692",
+            reference = "أذكار الصباح"
+        )
+        assertTrue(
+            "Search without diacritics must match text with tashkeel",
+            com.zekr.widget.data.repository.ZekrRepository.matchesSearch(item, "سبحان الله")
+        )
+        assertTrue(
+            "Search with hamza normalization must match",
+            com.zekr.widget.data.repository.ZekrRepository.matchesSearch(item, "اذكار الصباح")
+        )
+        assertFalse(
+            "Unrelated query should not match",
+            com.zekr.widget.data.repository.ZekrRepository.matchesSearch(item, "الكرسي")
+        )
+        assertEquals("٣٣", com.zekr.widget.data.repository.ZekrRepository.toArabicDigits(33))
+        assertEquals("١٠٠", com.zekr.widget.data.repository.ZekrRepository.toArabicDigits(100))
+    }
+
+    @Test
+    fun testWirdStatsTapCompletionAndStreak() {
+        val today = java.time.LocalDate.of(2026, 11, 15)
+        val yesterday = today.minusDays(1)
+        val twoDaysAgo = today.minusDays(2)
+
+        var stats = com.zekr.widget.data.model.WirdStats(dailyGoal = 10)
+        // Two days ago: 1 completed
+        stats = stats.withRecordedTap(ContentType.QURAN_AYAH, completedItem = true, today = twoDaysAgo)
+        // Yesterday: 3 taps on a 3x zekr, completing it on the 3rd tap
+        stats = stats.withRecordedTap(ContentType.AUTHENTIC_ZEKR, completedItem = false, today = yesterday)
+        stats = stats.withRecordedTap(ContentType.AUTHENTIC_ZEKR, completedItem = false, today = yesterday)
+        stats = stats.withRecordedTap(ContentType.AUTHENTIC_ZEKR, completedItem = true, today = yesterday)
+
+        // Even before completing any item today, streak from yesterday is 2
+        assertEquals(2, stats.currentStreak(today))
+
+        // Today: complete 1 hadith
+        stats = stats.withRecordedTap(ContentType.SAHIH_HADITH, completedItem = true, today = today)
+        assertEquals(3, stats.currentStreak(today))
+        assertEquals(3, stats.bestStreak)
+
+        val todayRec = stats.todayRecord(today)
+        assertEquals(1, todayRec.completedCount)
+        assertEquals(1, todayRec.totalTasbihTaps)
+        assertEquals(1, todayRec.hadithCompleted)
+
+        val weekly = stats.weeklySummary(today)
+        assertEquals(7, weekly.size)
+        assertTrue(weekly.last().isToday)
+        assertEquals(1, weekly.last().completedCount)
+    }
+
+    @Test
+    fun testUnlockAutoShufflePauseRules() {
+        val now = 10_000_000L
+        // Pinned always pauses
+        assertTrue(
+            com.zekr.widget.data.preferences.WidgetPreferencesRepository.shouldPauseUnlockShuffle(
+                currentRepCount = 0,
+                lastTapMs = 0L,
+                pinnedItemId = 42,
+                nowMs = now
+            )
+        )
+        // Mid-progress within 2 hours pauses
+        assertTrue(
+            com.zekr.widget.data.preferences.WidgetPreferencesRepository.shouldPauseUnlockShuffle(
+                currentRepCount = 5,
+                lastTapMs = now - 30 * 60_000L,
+                pinnedItemId = null,
+                nowMs = now
+            )
+        )
+        // Mid-progress older than 2 hours does NOT pause
+        assertFalse(
+            com.zekr.widget.data.preferences.WidgetPreferencesRepository.shouldPauseUnlockShuffle(
+                currentRepCount = 5,
+                lastTapMs = now - 3 * 3600_000L,
+                pinnedItemId = null,
+                nowMs = now
+            )
+        )
+        // Zero progress and unpinned does NOT pause
+        assertFalse(
+            com.zekr.widget.data.preferences.WidgetPreferencesRepository.shouldPauseUnlockShuffle(
+                currentRepCount = 0,
+                lastTapMs = 0L,
+                pinnedItemId = null,
+                nowMs = now
+            )
+        )
+    }
+
+    @Test
+    fun testShareFormattedTextFormatting() {
+        val item = ZekrEntity(
+            id = 1,
+            arabicText = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ",
+            type = ContentType.SAHIH_HADITH,
+            source = "صحيح البخاري: 6406",
+            reference = "كتاب الدعوات"
+        )
+        val formatted = com.zekr.widget.widget.render.ZekrShareHelper.buildFormattedShareText(item)
+        assertTrue(formatted.contains("«سُبْحَانَ اللَّهِ وَبِحَمْدِهِ»"))
+        assertTrue(formatted.contains("صحيح البخاري: 6406"))
+        assertTrue(formatted.contains("كتاب الدعوات"))
+    }
 }

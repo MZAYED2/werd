@@ -46,7 +46,7 @@ class ScreenLockReceiver : BroadcastReceiver() {
             try {
                 val prefRepo = WidgetPreferencesRepository(appContext)
                 val settings = prefRepo.getSettings()
-                if (settings.serviceEnabled) {
+                if (settings.serviceEnabled && !prefRepo.shouldPauseAutoShuffleOnUnlock()) {
                     ZekrGlanceWidget.shuffleToNext(appContext)
                 }
             } catch (e: Exception) {

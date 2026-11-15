@@ -65,6 +65,13 @@ import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import com.zekr.widget.data.model.WirdStats
 import com.zekr.widget.data.model.ZekrEntity
 import com.zekr.widget.data.preferences.GlassColorPreset
 import com.zekr.widget.data.preferences.GradientDirection
@@ -87,6 +94,7 @@ import kotlinx.coroutines.flow.flowOf
 import com.zekr.widget.widget.ZekrGlanceWidget
 import com.zekr.widget.widget.render.GlassRenderer
 import com.zekr.widget.widget.render.PatternDrawables
+import com.zekr.widget.widget.render.ZekrShareHelper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -102,6 +110,8 @@ private val TABS = listOf(
     "النقوش",
     "الزجاج والألوان",
     "الخط",
+    "المكتبة",
+    "الوِرد اليومي",
     "الإعدادات"
 )
 
@@ -117,6 +127,11 @@ fun HomeScreen(
     val prefRepo = remember(isPreview) { if (isPreview) null else WidgetPreferencesRepository(context) }
     val initialSettings by (prefRepo?.settingsFlow ?: remember { flowOf(WidgetSettings()) }).collectAsState(initial = WidgetSettings())
     val savedItemId by (prefRepo?.currentItemIdFlow ?: remember { flowOf(1) }).collectAsState(initial = 1)
+    val favoriteIds by (prefRepo?.favoriteIdsFlow ?: remember { flowOf(emptySet()) }).collectAsState(initial = emptySet())
+    val pinnedItemId by (prefRepo?.pinnedItemIdFlow ?: remember { flowOf(null) }).collectAsState(initial = null)
+    val currentRepCount by (prefRepo?.currentRepetitionFlow ?: remember { flowOf(0) }).collectAsState(initial = 0)
+    val customItems by (prefRepo?.customItemsFlow ?: remember { flowOf(emptyList()) }).collectAsState(initial = emptyList())
+    val wirdStats by (prefRepo?.wirdStatsFlow ?: remember { flowOf(WirdStats()) }).collectAsState(initial = WirdStats())
 
     var localSettings by remember { mutableStateOf<WidgetSettings?>(null) }
     val settings = localSettings ?: initialSettings
@@ -137,8 +152,11 @@ fun HomeScreen(
 
     val hazeState = remember { HazeState() }
 
-    val currentItem = remember(previewItemId, settings) {
-        ZekrRepository.getById(context, previewItemId)
+    val allItems = remember(customItems, settings) {
+        ZekrRepository.getAllItems(context, customItems)
+    }
+    val currentItem = remember(previewItemId, customItems, settings) {
+        ZekrRepository.getById(context, previewItemId, customItems)
     }
 
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -271,6 +289,39 @@ fun HomeScreen(
                             ) {
                                 Text("تم وحفظ", fontWeight = FontWeight.Bold)
                             }
+                        } else {
+                            val todayCompleted = wirdStats.todayRecord().completedCount
+                            val goal = wirdStats.dailyGoal.coerceAtLeast(1)
+                            Row(
+                                modifier = Modifier
+                                    .padding(end = 10.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Color(0xFF10B981).copy(alpha = 0.14f))
+                                    .border(
+                                        1.dp,
+                                        Color(0xFF10B981).copy(alpha = 0.42f),
+                                        RoundedCornerShape(14.dp)
+                                    )
+                                    .clickable { selectedTabIndex = 4 }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Canvas(modifier = Modifier.fillMaxSize()) {
+                                        drawCircle(color = Color(0xFF34D399))
+                                    }
+                                }
+                                Text(
+                                    text = "${ZekrRepository.toArabicDigits(todayCompleted)}/${ZekrRepository.toArabicDigits(goal)}",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF6EE7B7)
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -308,40 +359,97 @@ fun HomeScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    LiveGlassWidgetPreview(
-                        currentItem = currentItem,
-                        settings = settings,
-                        hazeState = hazeState,
-                        onClick = {
-                            if (isPreview) {
-                                val next = ZekrRepository.getRandomItem(
-                                    context = context,
+                    fun shufflePreviewAndWidgets(clearPin: Boolean) {
+                        if (isPreview) {
+                            val next = ZekrRepository.getRandomItem(
+                                context = context,
+                                includeQuran = settings.includeQuran,
+                                includeHadith = settings.includeHadith,
+                                includeAzkar = settings.includeAzkar,
+                                smartTimeContextEnabled = settings.smartTimeContextEnabled,
+                                favoritesOnlyMode = settings.favoritesOnlyMode,
+                                favoriteIds = favoriteIds,
+                                customItems = customItems,
+                                currentId = previewItemId
+                            )
+                            previewItemId = next.id
+                        } else {
+                            scope.launch {
+                                if (clearPin) {
+                                    prefRepo?.setPinnedItemId(null)
+                                }
+                                val seenIds = prefRepo?.getSeenItemIds().orEmpty()
+                                val result = ZekrRepository.selectNextFromPool(
+                                    allItems = allItems,
                                     includeQuran = settings.includeQuran,
                                     includeHadith = settings.includeHadith,
                                     includeAzkar = settings.includeAzkar,
                                     smartTimeContextEnabled = settings.smartTimeContextEnabled,
-                                    currentId = previewItemId
+                                    favoritesOnlyMode = settings.favoritesOnlyMode,
+                                    favoriteIds = favoriteIds,
+                                    currentId = previewItemId,
+                                    seenIds = seenIds
                                 )
-                                previewItemId = next.id
-                            } else {
-                                scope.launch {
-                                    val seenIds = prefRepo?.getSeenItemIds().orEmpty()
-                                    val result = ZekrRepository.selectNextFromPool(
-                                        allItems = ZekrRepository.getItems(context),
-                                        includeQuran = settings.includeQuran,
-                                        includeHadith = settings.includeHadith,
-                                        includeAzkar = settings.includeAzkar,
-                                        smartTimeContextEnabled = settings.smartTimeContextEnabled,
-                                        currentId = previewItemId,
-                                        seenIds = seenIds
-                                    )
-                                    previewItemId = result.item.id
-                                    pendingLocalIds.add(result.item.id)
-                                    prefRepo?.saveShuffleProgress(result.item.id, result.updatedSeenIds)
-                                    ZekrGlanceWidget.updateAllWidgets(context, settings, result.item.id)
-                                }
+                                previewItemId = result.item.id
+                                pendingLocalIds.add(result.item.id)
+                                prefRepo?.saveShuffleProgress(result.item.id, result.updatedSeenIds)
+                                ZekrGlanceWidget.updateAllWidgets(context, settings, result.item.id)
                             }
                         }
+                    }
+
+                    LiveGlassWidgetPreview(
+                        currentItem = currentItem,
+                        settings = settings,
+                        hazeState = hazeState,
+                        currentRepetition = currentRepCount,
+                        isFavorite = currentItem.id in favoriteIds,
+                        isPinned = pinnedItemId == currentItem.id,
+                        onBodyTap = {
+                            if (isPreview) {
+                                shufflePreviewAndWidgets(clearPin = false)
+                            } else {
+                                scope.launch {
+                                    val tapResult = prefRepo?.recordZekrTap(currentItem)
+                                    if (tapResult != null && tapResult.reachedTarget && !tapResult.isPinned) {
+                                        val seenIds = prefRepo.getSeenItemIds()
+                                        val result = ZekrRepository.selectNextFromPool(
+                                            allItems = allItems,
+                                            includeQuran = settings.includeQuran,
+                                            includeHadith = settings.includeHadith,
+                                            includeAzkar = settings.includeAzkar,
+                                            smartTimeContextEnabled = settings.smartTimeContextEnabled,
+                                            favoritesOnlyMode = settings.favoritesOnlyMode,
+                                            favoriteIds = favoriteIds,
+                                            currentId = previewItemId,
+                                            seenIds = seenIds
+                                        )
+                                        previewItemId = result.item.id
+                                        pendingLocalIds.add(result.item.id)
+                                        prefRepo.saveShuffleProgress(result.item.id, result.updatedSeenIds)
+                                        ZekrGlanceWidget.updateAllWidgets(context, settings, result.item.id)
+                                    } else {
+                                        ZekrGlanceWidget.updateAllWidgets(context, settings, currentItem.id)
+                                    }
+                                }
+                            }
+                        },
+                        onToggleFavorite = {
+                            if (!isPreview) {
+                                scope.launch {
+                                    prefRepo?.toggleFavorite(currentItem.id)
+                                    ZekrGlanceWidget.updateAllWidgets(context, settings, currentItem.id)
+                                }
+                            }
+                        },
+                        onShare = {
+                            if (!isPreview) {
+                                scope.launch {
+                                    ZekrShareHelper.shareZekrCard(context, currentItem, settings)
+                                }
+                            }
+                        },
+                        onSkip = { shufflePreviewAndWidgets(clearPin = true) }
                     )
                 }
 
@@ -410,7 +518,75 @@ fun HomeScreen(
                                 settings = settings,
                                 onUpdateSettings = { updateAndSync(it) }
                             )
-                            3 -> SettingsContentTabContent(
+                            3 -> LibraryTabContent(
+                                allItems = allItems,
+                                favoriteIds = favoriteIds,
+                                pinnedItemId = pinnedItemId,
+                                settings = settings,
+                                onToggleFavoritesOnlyMode = { enabled ->
+                                    updateAndSync(settings.copy(favoritesOnlyMode = enabled), immediate = true)
+                                },
+                                onToggleFavorite = { item ->
+                                    if (!isPreview) {
+                                        scope.launch {
+                                            prefRepo?.toggleFavorite(item.id)
+                                            ZekrGlanceWidget.updateAllWidgets(context, settings)
+                                        }
+                                    }
+                                },
+                                onTogglePin = { item ->
+                                    if (!isPreview) {
+                                        scope.launch {
+                                            val newPinId = if (pinnedItemId == item.id) null else item.id
+                                            prefRepo?.setPinnedItemId(newPinId)
+                                            if (newPinId != null) {
+                                                previewItemId = newPinId
+                                                pendingLocalIds.add(newPinId)
+                                            }
+                                            ZekrGlanceWidget.updateAllWidgets(context, settings, newPinId)
+                                        }
+                                    }
+                                },
+                                onShareItem = { item ->
+                                    if (!isPreview) {
+                                        scope.launch {
+                                            ZekrShareHelper.shareZekrCard(context, item, settings)
+                                        }
+                                    }
+                                },
+                                onSaveCustomItem = { savedItem ->
+                                    if (!isPreview) {
+                                        scope.launch {
+                                            val persisted = prefRepo?.upsertCustomItem(savedItem)
+                                            if (persisted != null) {
+                                                prefRepo.setPinnedItemId(persisted.id)
+                                                previewItemId = persisted.id
+                                                pendingLocalIds.add(persisted.id)
+                                                ZekrGlanceWidget.updateAllWidgets(context, settings, persisted.id)
+                                            }
+                                        }
+                                    }
+                                },
+                                onDeleteCustomItem = { item ->
+                                    if (!isPreview) {
+                                        scope.launch {
+                                            prefRepo?.deleteCustomItem(item.id)
+                                            ZekrGlanceWidget.updateAllWidgets(context, settings)
+                                        }
+                                    }
+                                }
+                            )
+                            4 -> DailyWirdTabContent(
+                                stats = wirdStats,
+                                onUpdateDailyGoal = { newGoal ->
+                                    if (!isPreview) {
+                                        scope.launch {
+                                            prefRepo?.updateDailyGoal(newGoal)
+                                        }
+                                    }
+                                }
+                            )
+                            5 -> SettingsContentTabContent(
                                 settings = settings,
                                 onUpdateSettings = { updateAndSync(it) },
                                 currentVersionName = currentVersionName,
@@ -1376,6 +1552,14 @@ fun SettingsContentTabContent(
                         label = { Text("الأذكار المأثورة") }
                     )
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                FilterChip(
+                    selected = settings.favoritesOnlyMode,
+                    onClick = {
+                        onUpdateSettings(settings.copy(favoritesOnlyMode = !settings.favoritesOnlyMode))
+                    },
+                    label = { Text("قصر الويدجت على المفضلة فقط ♥") }
+                )
             }
         }
 
@@ -1727,7 +1911,13 @@ fun LiveGlassWidgetPreview(
     currentItem: ZekrEntity,
     settings: WidgetSettings,
     hazeState: HazeState,
-    onClick: () -> Unit
+    currentRepetition: Int = 0,
+    isFavorite: Boolean = false,
+    isPinned: Boolean = false,
+    onBodyTap: () -> Unit = {},
+    onToggleFavorite: () -> Unit = {},
+    onShare: () -> Unit = {},
+    onSkip: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -1761,27 +1951,9 @@ fun LiveGlassWidgetPreview(
         )
     }
 
-    // Dynamic Spring-animated colors for ultra-smooth transitions
-    val targetPrimaryColor = Color(settings.primaryColor)
-    val targetSecondaryColor = if (settings.isGradient) Color(settings.secondaryColor) else targetPrimaryColor
     val targetTextColor = Color(settings.getAdaptiveTextColor())
+    val targetAccentColor = Color(settings.getAdaptiveAccentColor())
 
-    val animatedPrimaryColor by animateColorAsState(
-        targetValue = targetPrimaryColor,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "preview_primary_color"
-    )
-    val animatedSecondaryColor by animateColorAsState(
-        targetValue = targetSecondaryColor,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "preview_secondary_color"
-    )
     val animatedTextColor by animateColorAsState(
         targetValue = targetTextColor,
         animationSpec = spring(
@@ -1795,12 +1967,11 @@ fun LiveGlassWidgetPreview(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(210.dp)
+            .height(216.dp)
             .clip(RoundedCornerShape(26.dp))
             .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(26.dp))
     ) {
-        // 1. Wallpaper Backdrop: Rich wallpaper graphics with landscape & glowing celestial sun
-        // Note: Haze requires haze() and hazeChild() to be siblings, not parent/descendant
+        // 1. Wallpaper Backdrop
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1823,9 +1994,8 @@ fun LiveGlassWidgetPreview(
                         noiseFactor = (settings.blurGrade * 0.10f).coerceAtLeast(0f)
                     )
                 )
-                .bouncyClickable { onClick() }
+                .bouncyClickable { onBodyTap() }
         ) {
-            // High-fidelity glass canvas containing the translucent color and sharp Islamic pattern
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = null,
@@ -1835,7 +2005,6 @@ fun LiveGlassWidgetPreview(
                     .clip(RoundedCornerShape(22.dp))
             )
 
-            // Soft shimmer only — no white rim stroke
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1846,84 +2015,222 @@ fun LiveGlassWidgetPreview(
                     )
             )
 
-        // 3. Fluid Animated Content with harmonious typography & overflow-safe citation
-        AnimatedContent(
-            targetState = currentItem,
-            transitionSpec = {
-                (slideInVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
+            if (isPinned) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(animatedTextColor.copy(alpha = 0.16f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "مثبّت",
+                        color = targetAccentColor,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                ) { height -> height / 3 } + fadeIn())
-                    .togetherWith(
-                        slideOutVertically(
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessMedium
-                            )
-                        ) { height -> -height / 3 } + fadeOut()
-                    )
-            },
-            label = "zekr_animated_transition",
-            modifier = Modifier.fillMaxSize()
-        ) { item ->
+                }
+            }
+
+            // 3. Fluid Animated Content + Interactive Bottom Bar
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                BoxWithConstraints(
+                AnimatedContent(
+                    targetState = currentItem,
+                    transitionSpec = {
+                        (slideInVertically(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow
+                            )
+                        ) { height -> height / 3 } + fadeIn())
+                            .togetherWith(
+                                slideOutVertically(
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMedium
+                                    )
+                                ) { height -> -height / 3 } + fadeOut()
+                            )
+                    },
+                    label = "zekr_animated_transition",
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .clipToBounds()
-                        .padding(vertical = 4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val density = LocalDensity.current
-                    // Scale type with the preview card height so long zikr reflows instead of clipping
-                    val heightScale = (maxHeight / 118.dp).coerceIn(0.72f, 1.12f)
-                    val widthScale = (maxWidth / 280.dp).coerceIn(0.78f, 1.08f)
-                    val fitScale = minOf(heightScale, widthScale)
-                    val fittedFontSp = (settings.fontSizeSp * fitScale).coerceIn(12f, settings.fontSizeSp.toFloat() + 2f)
-                    val calculatedLineHeightSp = fittedFontSp * 1.38f
-                    val lineHeightDp = with(density) { calculatedLineHeightSp.sp.toDp() }
-                    val maxFitLines = if (lineHeightDp.value > 0) {
-                        (maxHeight / lineHeightDp).toInt().coerceIn(1, 8)
-                    } else 4
+                ) { item ->
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clipToBounds()
+                            .padding(vertical = 2.dp, horizontal = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val density = LocalDensity.current
+                        val boxMaxH = this.maxHeight
+                        val boxMaxW = this.maxWidth
+                        val heightScale = (boxMaxH / 108.dp).coerceIn(0.72f, 1.12f)
+                        val widthScale = (boxMaxW / 280.dp).coerceIn(0.78f, 1.08f)
+                        val fitScale = minOf(heightScale, widthScale)
+                        val fittedFontSp = (settings.fontSizeSp * fitScale).coerceIn(12f, settings.fontSizeSp.toFloat() + 2f)
+                        val calculatedLineHeightSp = fittedFontSp * 1.38f
+                        val lineHeightDp = with(density) { calculatedLineHeightSp.sp.toDp() }
+                        val maxFitLines = if (lineHeightDp.value > 0) {
+                            (boxMaxH / lineHeightDp).toInt().coerceIn(1, 7)
+                        } else 4
 
-                    Text(
-                        text = item.arabicText,
-                        color = animatedTextColor,
-                        fontSize = fittedFontSp.sp,
-                        fontFamily = FontHelper.getComposeFontFamily(settings.font),
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Medium,
-                        lineHeight = calculatedLineHeightSp.sp,
-                        maxLines = maxFitLines,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        Text(
+                            text = item.arabicText,
+                            color = animatedTextColor,
+                            fontSize = fittedFontSp.sp,
+                            fontFamily = FontHelper.getComposeFontFamily(settings.font),
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = calculatedLineHeightSp.sp,
+                            maxLines = maxFitLines,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
-                Text(
-                    text = item.getConciseCitation(),
-                    color = animatedTextColor.copy(alpha = 0.88f),
-                    fontFamily = FontHelper.getComposeFontFamily(settings.font),
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                // Repetition Progress Pill (shown when repetition > 1)
+                if (currentItem.repetition > 1) {
+                    val safeCurrent = currentRepetition.coerceIn(0, currentItem.repetition)
+                    val progress = (safeCurrent.toFloat() / currentItem.repetition.coerceAtLeast(1)).coerceIn(0f, 1f)
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(animatedTextColor.copy(alpha = 0.14f))
+                            .border(1.dp, animatedTextColor.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .fillMaxWidth(progress)
+                                .background(targetAccentColor.copy(alpha = 0.35f))
+                        )
+                        Text(
+                            text = "${ZekrRepository.toArabicDigits(safeCurrent)} / ${ZekrRepository.toArabicDigits(currentItem.repetition)}",
+                            color = animatedTextColor,
+                            fontFamily = FontHelper.getComposeFontFamily(settings.font),
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // Interactive Bottom Action Bar: [Favorite, Share] --- Citation --- [Skip]
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp)
-                )
+                        .height(30.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isFavorite) Color(0xFFFF5C7A).copy(alpha = 0.26f)
+                                    else animatedTextColor.copy(alpha = 0.14f)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isFavorite) Color(0xFFFF768E).copy(alpha = 0.6f)
+                                    else animatedTextColor.copy(alpha = 0.22f),
+                                    CircleShape
+                                )
+                                .clickable { onToggleFavorite() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                contentDescription = "المفضلة",
+                                tint = if (isFavorite) Color(0xFFFF6B86) else animatedTextColor.copy(alpha = 0.9f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(animatedTextColor.copy(alpha = 0.14f))
+                                .border(1.dp, animatedTextColor.copy(alpha = 0.22f), CircleShape)
+                                .clickable { onShare() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Share,
+                                contentDescription = "مشاركة",
+                                tint = animatedTextColor.copy(alpha = 0.9f),
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = currentItem.getConciseCitation(),
+                        color = animatedTextColor.copy(alpha = 0.88f),
+                        fontFamily = FontHelper.getComposeFontFamily(settings.font),
+                        fontSize = 10.5.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp)
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(animatedTextColor.copy(alpha = 0.14f))
+                            .border(1.dp, animatedTextColor.copy(alpha = 0.22f), CircleShape)
+                            .clickable { onSkip() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.size(12.dp)) {
+                            val w = size.width
+                            val h = size.height
+                            val strokeW = 1.6.dp.toPx()
+                            val iconColor = animatedTextColor.copy(alpha = 0.9f)
+                            val path = Path().apply {
+                                moveTo(w * 0.72f, h * 0.20f)
+                                lineTo(w * 0.35f, h * 0.50f)
+                                lineTo(w * 0.72f, h * 0.80f)
+                            }
+                            drawPath(
+                                path = path,
+                                color = iconColor,
+                                style = Stroke(width = strokeW, cap = StrokeCap.Round)
+                            )
+                            drawLine(
+                                color = iconColor,
+                                start = Offset(w * 0.20f, h * 0.22f),
+                                end = Offset(w * 0.20f, h * 0.78f),
+                                strokeWidth = strokeW,
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
+                }
             }
         }
-    }
     }
 }
 
@@ -2029,7 +2336,9 @@ fun LiveGlassWidgetCardPreview() {
                 currentItem = ZekrRepository.getById(LocalContext.current, 1),
                 settings = WidgetSettings(),
                 hazeState = remember { HazeState() },
-                onClick = {}
+                currentRepetition = 1,
+                isFavorite = true,
+                onBodyTap = {}
             )
         }
     }

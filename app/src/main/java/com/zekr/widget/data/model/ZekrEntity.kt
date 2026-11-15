@@ -11,7 +11,8 @@ data class ZekrEntity(
     val reference: String,          // Book/Chapter name
     val category: String = "عام",   // "أذكار الصباح", "أذكار المساء", "الاستغفار", "الرقية", etc.
     val repetition: Int = 1,
-    val englishMeaning: String = ""
+    val englishMeaning: String = "",
+    val isCustom: Boolean = false
 ) {
     fun getConciseCitation(maxChars: Int = 42): String {
         // If source has dual citations like "البخاري | مسلم", take the primary citation
