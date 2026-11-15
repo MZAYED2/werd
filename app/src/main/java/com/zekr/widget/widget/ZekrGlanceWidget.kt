@@ -104,16 +104,19 @@ class ZekrGlanceWidget : GlanceAppWidget() {
             val prefRepo = WidgetPreferencesRepository(appContext)
             val settings = prefRepo.getSettings()
             val currentId = prefRepo.getCurrentItemId()
+            val seenIds = prefRepo.getSeenItemIds()
 
-            val nextItem = ZekrRepository.getRandomItem(
-                context = appContext,
+            val nextResult = ZekrRepository.selectNextFromPool(
+                allItems = ZekrRepository.getItems(appContext),
                 includeQuran = settings.includeQuran,
                 includeHadith = settings.includeHadith,
                 includeAzkar = settings.includeAzkar,
-                currentId = currentId
+                smartTimeContextEnabled = settings.smartTimeContextEnabled,
+                currentId = currentId,
+                seenIds = seenIds
             )
-            prefRepo.setCurrentItemId(nextItem.id)
-            updateAllWidgets(context = appContext, newSettings = settings, specificItemId = nextItem.id)
+            prefRepo.saveShuffleProgress(nextResult.item.id, nextResult.updatedSeenIds)
+            updateAllWidgets(context = appContext, newSettings = settings, specificItemId = nextResult.item.id)
         }
     }
 

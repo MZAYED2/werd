@@ -32,11 +32,13 @@ object WidgetPreferenceKeys {
     val KEY_INCLUDE_QURAN = booleanPreferencesKey("pref_include_quran")
     val KEY_INCLUDE_HADITH = booleanPreferencesKey("pref_include_hadith")
     val KEY_INCLUDE_AZKAR = booleanPreferencesKey("pref_include_azkar")
+    val KEY_SMART_TIME_CONTEXT = booleanPreferencesKey("pref_smart_time_context")
     val KEY_SERVICE_ENABLED = booleanPreferencesKey("pref_service_enabled")
     val KEY_STYLE_ROTATION_ENABLED = booleanPreferencesKey("pref_style_rotation_enabled")
     val KEY_STYLE_ROTATION_HOURS = intPreferencesKey("pref_style_rotation_hours")
     val KEY_CURRENT_ITEM_ID = intPreferencesKey("pref_current_item_id")
     val KEY_CUSTOM_IMAGE_URI = stringPreferencesKey("pref_custom_image_uri")
+    val KEY_SEEN_ITEM_IDS = stringPreferencesKey("pref_seen_item_ids")
 }
 
 class WidgetPreferencesRepository(private val context: Context) {
@@ -71,6 +73,7 @@ class WidgetPreferencesRepository(private val context: Context) {
         val includeQuran = prefs[WidgetPreferenceKeys.KEY_INCLUDE_QURAN] ?: true
         val includeHadith = prefs[WidgetPreferenceKeys.KEY_INCLUDE_HADITH] ?: true
         val includeAzkar = prefs[WidgetPreferenceKeys.KEY_INCLUDE_AZKAR] ?: true
+        val smartTimeContextEnabled = prefs[WidgetPreferenceKeys.KEY_SMART_TIME_CONTEXT] ?: true
         val serviceEnabled = prefs[WidgetPreferenceKeys.KEY_SERVICE_ENABLED] ?: true
         val styleRotationEnabled = prefs[WidgetPreferenceKeys.KEY_STYLE_ROTATION_ENABLED] ?: false
         val styleRotationHours = (prefs[WidgetPreferenceKeys.KEY_STYLE_ROTATION_HOURS] ?: 6)
@@ -94,6 +97,7 @@ class WidgetPreferencesRepository(private val context: Context) {
             includeQuran = includeQuran,
             includeHadith = includeHadith,
             includeAzkar = includeAzkar,
+            smartTimeContextEnabled = smartTimeContextEnabled,
             serviceEnabled = serviceEnabled,
             styleRotationEnabled = styleRotationEnabled,
             styleRotationHours = styleRotationHours
@@ -107,6 +111,11 @@ class WidgetPreferencesRepository(private val context: Context) {
     suspend fun getSettings(): WidgetSettings = settingsFlow.first()
 
     suspend fun getCurrentItemId(): Int = currentItemIdFlow.first()
+
+    suspend fun getSeenItemIds(): Set<Int> {
+        val raw = context.dataStore.data.first()[WidgetPreferenceKeys.KEY_SEEN_ITEM_IDS].orEmpty()
+        return parseIdSet(raw)
+    }
 
     suspend fun updateSettings(settings: WidgetSettings) {
         context.dataStore.edit { prefs ->
@@ -125,6 +134,7 @@ class WidgetPreferencesRepository(private val context: Context) {
             prefs[WidgetPreferenceKeys.KEY_INCLUDE_QURAN] = settings.includeQuran
             prefs[WidgetPreferenceKeys.KEY_INCLUDE_HADITH] = settings.includeHadith
             prefs[WidgetPreferenceKeys.KEY_INCLUDE_AZKAR] = settings.includeAzkar
+            prefs[WidgetPreferenceKeys.KEY_SMART_TIME_CONTEXT] = settings.smartTimeContextEnabled
             prefs[WidgetPreferenceKeys.KEY_SERVICE_ENABLED] = settings.serviceEnabled
             prefs[WidgetPreferenceKeys.KEY_STYLE_ROTATION_ENABLED] = settings.styleRotationEnabled
             prefs[WidgetPreferenceKeys.KEY_STYLE_ROTATION_HOURS] =
@@ -140,6 +150,28 @@ class WidgetPreferencesRepository(private val context: Context) {
     suspend fun setCurrentItemId(id: Int) {
         context.dataStore.edit { prefs ->
             prefs[WidgetPreferenceKeys.KEY_CURRENT_ITEM_ID] = id
+            val seen = parseIdSet(prefs[WidgetPreferenceKeys.KEY_SEEN_ITEM_IDS].orEmpty()) + id
+            prefs[WidgetPreferenceKeys.KEY_SEEN_ITEM_IDS] = serializeIdSet(seen)
+        }
+    }
+
+    suspend fun saveShuffleProgress(nextItemId: Int, updatedSeenIds: Set<Int>) {
+        context.dataStore.edit { prefs ->
+            prefs[WidgetPreferenceKeys.KEY_CURRENT_ITEM_ID] = nextItemId
+            prefs[WidgetPreferenceKeys.KEY_SEEN_ITEM_IDS] = serializeIdSet(updatedSeenIds + nextItemId)
+        }
+    }
+
+    companion object {
+        internal fun parseIdSet(raw: String): Set<Int> {
+            if (raw.isBlank()) return emptySet()
+            return raw.split(',')
+                .mapNotNull { it.trim().toIntOrNull() }
+                .toSet()
+        }
+
+        internal fun serializeIdSet(ids: Set<Int>): String {
+            return ids.joinToString(",")
         }
     }
 }

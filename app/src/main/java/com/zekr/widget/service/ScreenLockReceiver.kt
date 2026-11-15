@@ -1,5 +1,6 @@
 package com.zekr.widget.service
 
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -13,15 +14,23 @@ class ScreenLockReceiver : BroadcastReceiver() {
 
     companion object {
         private var lastTriggerTime = 0L
-        private const val DEBOUNCE_MS = 800L
+        internal const val DEBOUNCE_MS = 3_000L
+
+        internal fun shouldTriggerOnAction(action: String?, isKeyguardLocked: Boolean): Boolean {
+            return when (action) {
+                Intent.ACTION_USER_PRESENT -> true
+                Intent.ACTION_SCREEN_ON -> !isKeyguardLocked
+                else -> false
+            }
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
-        if (action != Intent.ACTION_SCREEN_ON &&
-            action != Intent.ACTION_SCREEN_OFF &&
-            action != Intent.ACTION_USER_PRESENT
-        ) {
+        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val isKeyguardLocked = keyguardManager?.isKeyguardLocked ?: true
+
+        if (!shouldTriggerOnAction(action, isKeyguardLocked)) {
             return
         }
 

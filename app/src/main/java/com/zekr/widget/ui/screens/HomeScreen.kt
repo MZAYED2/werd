@@ -313,19 +313,32 @@ fun HomeScreen(
                         settings = settings,
                         hazeState = hazeState,
                         onClick = {
-                            val next = ZekrRepository.getRandomItem(
-                                context = context,
-                                includeQuran = settings.includeQuran,
-                                includeHadith = settings.includeHadith,
-                                includeAzkar = settings.includeAzkar,
-                                currentId = previewItemId
-                            )
-                            previewItemId = next.id
-                            pendingLocalIds.add(next.id)
-                            if (!isPreview) {
+                            if (isPreview) {
+                                val next = ZekrRepository.getRandomItem(
+                                    context = context,
+                                    includeQuran = settings.includeQuran,
+                                    includeHadith = settings.includeHadith,
+                                    includeAzkar = settings.includeAzkar,
+                                    smartTimeContextEnabled = settings.smartTimeContextEnabled,
+                                    currentId = previewItemId
+                                )
+                                previewItemId = next.id
+                            } else {
                                 scope.launch {
-                                    prefRepo?.setCurrentItemId(next.id)
-                                    ZekrGlanceWidget.updateAllWidgets(context, settings, next.id)
+                                    val seenIds = prefRepo?.getSeenItemIds().orEmpty()
+                                    val result = ZekrRepository.selectNextFromPool(
+                                        allItems = ZekrRepository.getItems(context),
+                                        includeQuran = settings.includeQuran,
+                                        includeHadith = settings.includeHadith,
+                                        includeAzkar = settings.includeAzkar,
+                                        smartTimeContextEnabled = settings.smartTimeContextEnabled,
+                                        currentId = previewItemId,
+                                        seenIds = seenIds
+                                    )
+                                    previewItemId = result.item.id
+                                    pendingLocalIds.add(result.item.id)
+                                    prefRepo?.saveShuffleProgress(result.item.id, result.updatedSeenIds)
+                                    ZekrGlanceWidget.updateAllWidgets(context, settings, result.item.id)
                                 }
                             }
                         }
@@ -1389,13 +1402,57 @@ fun SettingsContentTabContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "التبديل التلقائي عند قفل/فتح الشاشة",
+                            text = "تخصيص الأذكار حسب الوقت",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "تحديث الذكر تلقائياً في كل مرة تغلق أو تفتح فيها شاشة هاتفك",
+                            text = "إعطاء الأولوية لأذكار الصباح صباحاً، والمساء عصراً، والنوم والحفظ ليلاً مع إخفاء أذكار الوقت المعاكس",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.smartTimeContextEnabled,
+                        onCheckedChange = { enabled ->
+                            onUpdateSettings(settings.copy(smartTimeContextEnabled = enabled))
+                        }
+                    )
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(
+                    1.dp,
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.2f), Color.White.copy(alpha = 0.04f))
+                    )
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "التبديل التلقائي عند فتح قفل الشاشة",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "تحديث الذكر مرة واحدة فقط عند فتح قفل الهاتف دون تكرار قبل إتمام القائمة",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

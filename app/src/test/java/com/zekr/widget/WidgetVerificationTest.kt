@@ -333,4 +333,153 @@ class WidgetVerificationTest {
         assertEquals(widgetAspect, bitmapAspect, 0.05f)
         assertTrue(wide.first.toLong() * wide.second.toLong() <= 700_000L)
     }
+
+    @Test
+    fun testExpandedLibrarySizeAndDistribution() {
+        val jsonFile = File("src/main/assets/data/sahih_content.json")
+        val altJsonFile = File("app/src/main/assets/data/sahih_content.json")
+        val file = if (jsonFile.exists()) jsonFile else altJsonFile
+        val items: List<ZekrEntity> = Json { ignoreUnknownKeys = true }.decodeFromString(file.readText())
+
+        assertTrue("Library should have at least 180 items", items.size >= 180)
+        val quranCount = items.count { it.type == ContentType.QURAN_AYAH }
+        val hadithCount = items.count { it.type == ContentType.SAHIH_HADITH }
+        val zekrCount = items.count { it.type == ContentType.AUTHENTIC_ZEKR }
+
+        assertTrue("Should have at least 40 Quran items", quranCount >= 40)
+        assertTrue("Should have at least 40 Hadith items", hadithCount >= 40)
+        assertTrue("Should have at least 40 Authentic Zekr items", zekrCount >= 40)
+    }
+
+    @Test
+    fun testDeckShuffleNeverRepeatsBeforeExhaustingPool() {
+        val samplePool = (1..25).map { id ->
+            ZekrEntity(
+                id = id,
+                arabicText = "ذكر رقم $id",
+                type = ContentType.AUTHENTIC_ZEKR,
+                source = "صحيح مسلم: $id",
+                reference = "فضل الذكر",
+                category = "فضل الذكر"
+            )
+        }
+
+        var seenIds = emptySet<Int>()
+        var currentId: Int? = null
+        val pickedOrder = mutableListOf<Int>()
+
+        // Draw all 25 items in the first full cycle
+        repeat(samplePool.size) {
+            val result = com.zekr.widget.data.repository.ZekrRepository.selectNextFromPool(
+                allItems = samplePool,
+                smartTimeContextEnabled = false,
+                currentId = currentId,
+                seenIds = seenIds
+            )
+            currentId = result.item.id
+            seenIds = result.updatedSeenIds
+            pickedOrder.add(result.item.id)
+        }
+
+        assertEquals(
+            "Every single item in the 25-item pool must be shown once before any repeat",
+            samplePool.map { it.id }.toSet(),
+            pickedOrder.toSet()
+        )
+        assertEquals(samplePool.size, pickedOrder.size)
+
+        // The 26th draw should automatically reset the deck and not repeat the 25th item immediately
+        val nextCycleFirst = com.zekr.widget.data.repository.ZekrRepository.selectNextFromPool(
+            allItems = samplePool,
+            smartTimeContextEnabled = false,
+            currentId = currentId,
+            seenIds = seenIds
+        )
+        assertTrue("Deck should reset cleanly on the 26th draw", nextCycleFirst.item.id != currentId)
+        assertEquals("After reset, seenIds should contain previous currentId + newly picked ID", 2, nextCycleFirst.updatedSeenIds.size)
+    }
+
+    @Test
+    fun testSmartTimeContextExcludesOppositeTimeCategories() {
+        val items = listOf(
+            ZekrEntity(1, "صباح", ContentType.AUTHENTIC_ZEKR, "مسلم", "مرجع", category = "أذكار الصباح"),
+            ZekrEntity(2, "مساء", ContentType.AUTHENTIC_ZEKR, "مسلم", "مرجع", category = "أذكار المساء"),
+            ZekrEntity(3, "نوم", ContentType.AUTHENTIC_ZEKR, "مسلم", "مرجع", category = "أذكار النوم"),
+            ZekrEntity(4, "عام", ContentType.AUTHENTIC_ZEKR, "مسلم", "مرجع", category = "فضل الذكر")
+        )
+
+        // Morning (8 AM): should never pick Evening (2) or Sleep (3)
+        var seenMorning = emptySet<Int>()
+        repeat(10) {
+            val res = com.zekr.widget.data.repository.ZekrRepository.selectNextFromPool(
+                allItems = items,
+                smartTimeContextEnabled = true,
+                seenIds = seenMorning,
+                hourOfDay = 8
+            )
+            seenMorning = res.updatedSeenIds
+            assertFalse("Morning should not show evening zekr", res.item.id == 2)
+            assertFalse("Morning should not show sleep zekr", res.item.id == 3)
+        }
+
+        // Evening (17 / 5 PM): should never pick Morning (1) or Sleep (3)
+        var seenEvening = emptySet<Int>()
+        repeat(10) {
+            val res = com.zekr.widget.data.repository.ZekrRepository.selectNextFromPool(
+                allItems = items,
+                smartTimeContextEnabled = true,
+                seenIds = seenEvening,
+                hourOfDay = 17
+            )
+            seenEvening = res.updatedSeenIds
+            assertFalse("Evening should not show morning zekr", res.item.id == 1)
+            assertFalse("Evening should not show sleep zekr", res.item.id == 3)
+        }
+
+        // Night (23 / 11 PM): should never pick Morning (1) or Evening (2)
+        var seenNight = emptySet<Int>()
+        repeat(10) {
+            val res = com.zekr.widget.data.repository.ZekrRepository.selectNextFromPool(
+                allItems = items,
+                smartTimeContextEnabled = true,
+                seenIds = seenNight,
+                hourOfDay = 23
+            )
+            seenNight = res.updatedSeenIds
+            assertFalse("Night should not show morning zekr", res.item.id == 1)
+            assertFalse("Night should not show evening zekr", res.item.id == 2)
+        }
+    }
+
+    @Test
+    fun testScreenUnlockTriggerRules() {
+        assertTrue(
+            "Should trigger on ACTION_USER_PRESENT",
+            com.zekr.widget.service.ScreenLockReceiver.shouldTriggerOnAction(
+                android.content.Intent.ACTION_USER_PRESENT,
+                isKeyguardLocked = false
+            )
+        )
+        assertFalse(
+            "Should never trigger on ACTION_SCREEN_OFF",
+            com.zekr.widget.service.ScreenLockReceiver.shouldTriggerOnAction(
+                android.content.Intent.ACTION_SCREEN_OFF,
+                isKeyguardLocked = false
+            )
+        )
+        assertFalse(
+            "Should not trigger on ACTION_SCREEN_ON while keyguard is locked",
+            com.zekr.widget.service.ScreenLockReceiver.shouldTriggerOnAction(
+                android.content.Intent.ACTION_SCREEN_ON,
+                isKeyguardLocked = true
+            )
+        )
+        assertTrue(
+            "Should trigger on ACTION_SCREEN_ON only when device has no keyguard lock",
+            com.zekr.widget.service.ScreenLockReceiver.shouldTriggerOnAction(
+                android.content.Intent.ACTION_SCREEN_ON,
+                isKeyguardLocked = false
+            )
+        )
+    }
 }

@@ -18,19 +18,22 @@ class ShuffleWidgetAction : ActionCallback {
         val prefRepo = WidgetPreferencesRepository(appContext)
         val settings = prefRepo.getSettings()
         val currentId = prefRepo.getCurrentItemId()
+        val seenIds = prefRepo.getSeenItemIds()
 
-        val nextItem = ZekrRepository.getRandomItem(
-            context = appContext,
+        val nextResult = ZekrRepository.selectNextFromPool(
+            allItems = ZekrRepository.getItems(appContext),
             includeQuran = settings.includeQuran,
             includeHadith = settings.includeHadith,
             includeAzkar = settings.includeAzkar,
-            currentId = currentId
+            smartTimeContextEnabled = settings.smartTimeContextEnabled,
+            currentId = currentId,
+            seenIds = seenIds
         )
 
-        prefRepo.setCurrentItemId(nextItem.id)
+        prefRepo.saveShuffleProgress(nextResult.item.id, nextResult.updatedSeenIds)
 
         updateAppWidgetState(context, glanceId) { prefs ->
-            prefs[KEY_ZEKR_ID] = nextItem.id
+            prefs[KEY_ZEKR_ID] = nextResult.item.id
             prefs[KEY_COLOR_PRESET] = settings.colorPreset.id
             prefs[KEY_IS_GRADIENT] = settings.isGradient
             prefs[KEY_PRIMARY_COLOR] = settings.primaryColor
