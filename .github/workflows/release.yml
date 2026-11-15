@@ -34,18 +34,24 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Decode Keystore (if configured in GitHub Secrets)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
         run: |
-          mkdir -p keystore
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > keystore/release.jks
-          cat <<EOF > keystore.properties
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            mkdir -p keystore
+            echo "$KEYSTORE_BASE64" | base64 --decode > keystore/release.jks
+            cat <<EOF > keystore.properties
           storeFile=keystore/release.jks
-          storePassword=${{ secrets.KEYSTORE_STORE_PASSWORD }}
-          keyAlias=${{ secrets.KEYSTORE_KEY_ALIAS }}
-          keyPassword=${{ secrets.KEYSTORE_KEY_PASSWORD }}
+          storePassword=$KEYSTORE_STORE_PASSWORD
+          keyAlias=$KEYSTORE_KEY_ALIAS
+          keyPassword=$KEYSTORE_KEY_PASSWORD
           EOF
+          fi
 
-      - name: Build Release APK (Signed if keystore exists, otherwise Debug/Unsigned fallback)
+      - name: Build Release APK (Signed if keystore exists, otherwise Debug fallback)
         run: |
           if [ -f "keystore.properties" ]; then
             ./gradlew assembleRelease --no-daemon
@@ -58,7 +64,7 @@ jobs:
         run: |
           APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
           echo "Found APK: $APK_PATH"
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Verify RELEASE_NOTES.md exists
         run: |
@@ -70,8 +76,8 @@ jobs:
       - name: Create GitHub Release from RELEASE_NOTES.md
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          name: "تطبيق ورد ${{ github.event.inputs.tag_name || github.ref_name }}"
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
+          name: "تطبيق ورد ${{ inputs.tag_name || github.ref_name }}"
           body_path: RELEASE_NOTES.md
           files: ${{ steps.prep_apk.outputs.apk_path }}
           draft: false
