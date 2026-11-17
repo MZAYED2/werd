@@ -1,11 +1,13 @@
 package com.zekr.widget.widget
 
 import android.content.Context
+import android.content.Intent
 import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.action.ActionCallback
 import com.zekr.widget.data.preferences.WidgetPreferencesRepository
 import com.zekr.widget.data.repository.ZekrRepository
+import com.zekr.widget.ui.tasbeeh.TasbeehDialogActivity
 import com.zekr.widget.widget.render.ZekrShareHelper
 
 class TapZekrBodyAction : ActionCallback {
@@ -65,5 +67,22 @@ class ShuffleWidgetAction : ActionCallback {
         parameters: ActionParameters
     ) {
         ZekrGlanceWidget.shuffleToNext(context.applicationContext, clearPin = true)
+    }
+}
+
+class LaunchTasbeehAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val appContext = context.applicationContext
+        val prefRepo = WidgetPreferencesRepository(appContext)
+        val currentId = prefRepo.getCurrentItemId()
+        val intent = Intent(appContext, TasbeehDialogActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(TasbeehDialogActivity.EXTRA_ZEKR_ID, currentId)
+        }
+        appContext.startActivity(intent)
     }
 }

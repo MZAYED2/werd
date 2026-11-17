@@ -2,6 +2,8 @@
     <string name="app_name">ورد</string>
     <string name="widget_name">Athkar &amp; Zekr</string>
     <string name="widget_description">Display daily and continuous Athkar directly on your home screen.</string>
+    <string name="lock_screen_widget_name">ورد - شاشة القفل والسبحة السريعة</string>
+    <string name="lock_screen_widget_description">عرض الذكر وتسبيح سريع مباشرة من شاشة القفل بدون فتح الهاتف.</string>
     <string name="next_zekr">Next</string>
     <string name="previous_zekr">Previous</string>
     <string name="count_zekr">Count</string>

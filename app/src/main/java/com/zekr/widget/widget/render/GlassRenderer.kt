@@ -471,13 +471,27 @@ object GlassRenderer {
         currentRepetition: Int = 0,
         isFavorite: Boolean = false,
         isPinned: Boolean = false,
-        showInteractiveBar: Boolean = true
+        showInteractiveBar: Boolean = true,
+        widthDp: Float = 0f,
+        heightDp: Float = 0f,
+        density: Float = 0f
     ): Bitmap {
         val safeW = if (width <= 0) 680 else width
         val safeH = if (height <= 0) 380 else height
-        // Reference canvas is 680×380. Type scales with height so a resize reflows
-        // the same bitmap instead of stretching glyphs. Scale is 1 at that height.
-        val layoutScale = (safeH / 380f).coerceIn(0.45f, 2.6f)
+
+        val resolvedDensity = if (density > 0f) density else (context.resources.displayMetrics.density).coerceAtLeast(1f)
+        val resolvedWidthDp = if (widthDp > 0f) widthDp else (safeW / resolvedDensity)
+        val resolvedHeightDp = if (heightDp > 0f) heightDp else (safeH / resolvedDensity)
+        val scaleFactor = (safeW.toFloat() / (resolvedWidthDp * resolvedDensity)).coerceIn(0.2f, 5f)
+
+        val layout = WidgetLayoutGeometry.compute(
+            widthDp = resolvedWidthDp,
+            heightDp = resolvedHeightDp,
+            density = resolvedDensity,
+            scaleFactor = scaleFactor,
+            hasMultiRep = item.repetition > 1
+        )
+
         val uiScale = min(safeW / 680f, safeH / 380f).coerceIn(0.55f, 2.2f)
         val radiusScale = min(safeW / 680f, safeH / 380f).coerceIn(0.45f, 2.6f)
         val scaledRadius = (cornerRadius * radiusScale).coerceAtMost(min(safeW, safeH) / 2f)
@@ -522,27 +536,17 @@ object GlassRenderer {
         ).toInt()
         val customTypeface = FontHelper.getTypeface(context, font)
 
-        val hasMultiRep = item.repetition > 1 && showInteractiveBar
-        val reservedBottom = when {
-            !showInteractiveBar -> 76f * layoutScale
-            hasMultiRep -> 108f * layoutScale
-            else -> 82f * layoutScale
-        }
-
-        // 1. Arabic Zekr Text (Center) with harmonious spacing and line height
-        val horizontalPadding = (52f * layoutScale).roundToInt()
-            .coerceAtMost(((safeW - 32) / 2).coerceAtLeast(0))
-            .coerceAtLeast(8)
-        val maxTextWidth = (safeW - horizontalPadding * 2).coerceAtLeast(32)
-        val availableHeightForZekr = (safeH - reservedBottom).coerceAtLeast(80f * layoutScale)
-        val minTextSize = 16f * layoutScale
+        // 1. Arabic Zekr Text (Center) using unified geometry
+        val maxTextWidth = layout.maxTextWidthPx.roundToInt().coerceAtLeast(32)
+        val availableHeightForZekr = layout.availableTextHeightPx.coerceAtLeast(40f)
+        val minTextSize = 13f * layout.toPx(1f)
 
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = textColor
             typeface = customTypeface
         }
 
-        var currentTextSize = fontSizeSp * 2.05f * layoutScale
+        var currentTextSize = fontSizeSp * 1.95f * layout.toPx(1f)
         textPaint.textSize = currentTextSize
 
         var staticLayout: StaticLayout
@@ -551,19 +555,18 @@ object GlassRenderer {
                 item.arabicText, 0, item.arabicText.length, textPaint, maxTextWidth
             )
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .setLineSpacing(4f * layoutScale, 1.22f)
+                .setLineSpacing(3f * layout.scaleFactor, 1.20f)
                 .setIncludePad(false)
                 .build()
 
             if (staticLayout.height <= availableHeightForZekr || currentTextSize <= minTextSize) {
                 break
             }
-            currentTextSize = (currentTextSize - 1.5f * layoutScale).coerceAtLeast(minTextSize)
+            currentTextSize = (currentTextSize - 1.2f * layout.scaleFactor).coerceAtLeast(minTextSize)
             textPaint.textSize = currentTextSize
         }
 
-        // Extreme long text boundary protection: if text exceeds available height even at minimum size,
-        // compute the maximum lines that strictly fit and truncate cleanly with an ellipsis (…)
+        // Long text boundary protection
         if (staticLayout.height > availableHeightForZekr) {
             var fittedLines = 0
             for (i in 0 until staticLayout.lineCount) {
@@ -578,7 +581,7 @@ object GlassRenderer {
                 item.arabicText, 0, item.arabicText.length, textPaint, maxTextWidth
             )
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .setLineSpacing(4f * layoutScale, 1.22f)
+                .setLineSpacing(3f * layout.scaleFactor, 1.20f)
                 .setIncludePad(false)
                 .setMaxLines(safeLines)
                 .setEllipsize(TextUtils.TruncateAt.END)
@@ -586,7 +589,7 @@ object GlassRenderer {
                 .build()
         }
 
-        val topPadding = 24f * layoutScale
+        val topPadding = layout.textTopPaddingPx
         val centerY = topPadding + (availableHeightForZekr / 2f)
         val startY = (centerY - (staticLayout.height / 2f)).coerceAtLeast(topPadding)
         val startX = (safeW - maxTextWidth) / 2f
@@ -609,33 +612,28 @@ object GlassRenderer {
         }
 
         // 2. Footer & Interactive Bottom Bar
-        if (showInteractiveBar) {
-            val barCenterY = safeH - 30f * layoutScale
-            val btnRadius = 16.5f * uiScale
+        if (showInteractiveBar && layout.showInteractiveBar) {
+            val barCenterY = layout.barCenterYPx
+            val btnRadius = layout.drawnButtonRadiusPx
 
-            // Right Side: Favorite (♥) & Share buttons
-            val favCx = safeW - 36f * uiScale
-            val shareCx = safeW - 76f * uiScale
+            // Right Side: Exactly three action buttons: Favorite, Share, Tasbeeh
+            drawActionButtonPill(canvas, layout.favCxPx, barCenterY, btnRadius, textColor, highlighted = isFavorite)
+            drawHeartIcon(canvas, layout.favCxPx, barCenterY, btnRadius * 0.58f, textColor, filled = isFavorite)
 
-            drawActionButtonPill(canvas, favCx, barCenterY, btnRadius, textColor, highlighted = isFavorite)
-            drawHeartIcon(canvas, favCx, barCenterY, btnRadius * 0.56f, textColor, filled = isFavorite)
+            drawActionButtonPill(canvas, layout.shareCxPx, barCenterY, btnRadius, textColor, highlighted = false)
+            drawShareIcon(canvas, layout.shareCxPx, barCenterY, btnRadius * 0.56f, textColor)
 
-            drawActionButtonPill(canvas, shareCx, barCenterY, btnRadius, textColor, highlighted = false)
-            drawShareIcon(canvas, shareCx, barCenterY, btnRadius * 0.54f, textColor)
+            drawActionButtonPill(canvas, layout.tasbeehCxPx, barCenterY, btnRadius, accentColor, highlighted = false)
+            drawTasbeehIcon(canvas, layout.tasbeehCxPx, barCenterY, btnRadius * 0.56f, accentColor)
 
-            // Left Side: Skip / Next button (‹)
-            val skipCx = 36f * uiScale
-            drawActionButtonPill(canvas, skipCx, barCenterY, btnRadius, textColor, highlighted = false)
-            drawSkipNextIcon(canvas, skipCx, barCenterY, btnRadius * 0.52f, textColor)
-
-            // Center: Repetition Progress Pill (when repetition > 1) above citation
+            // Repetition Progress Pill (when repetition > 1)
             if (item.repetition > 1) {
-                val pillCenterY = safeH - 59f * layoutScale
                 drawRepetitionPill(
                     canvas = canvas,
-                    centerX = safeW / 2f,
-                    centerY = pillCenterY,
-                    scale = layoutScale,
+                    centerX = layout.pillCxPx,
+                    centerY = layout.pillCyPx,
+                    pillW = layout.pillWidthPx,
+                    pillH = layout.pillHeightPx,
                     currentRepetition = currentRepetition.coerceIn(0, item.repetition),
                     targetRepetition = item.repetition,
                     textColor = textColor,
@@ -644,37 +642,40 @@ object GlassRenderer {
                 )
             }
 
-            // Center Citation bounded cleanly between Skip (left) and Share/Fav (right)
-            val footerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(205, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
-                textSize = 18.5f * layoutScale
-                typeface = customTypeface
-                textAlign = Paint.Align.CENTER
+            // Citation Text left of the 3 buttons - enhanced contrast and legibility
+            if (layout.maxCitationWidthPx >= 48f) {
+                val footerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.argb(240, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
+                    textSize = (17.5f * layout.scaleFactor).coerceIn(12f, 22f)
+                    typeface = customTypeface
+                    textAlign = Paint.Align.CENTER
+                    setShadowLayer(3.5f * layout.scaleFactor, 0f, 1f * layout.scaleFactor, Color.argb(160, 0, 0, 0))
+                }
+                var citationText = item.getConciseCitation()
+                if (footerPaint.measureText(citationText) > layout.maxCitationWidthPx) {
+                    val count = footerPaint.breakText(citationText, true, layout.maxCitationWidthPx - 8f, null)
+                    citationText = citationText.take(count).trimEnd() + "…"
+                }
+                val footerY = barCenterY + (footerPaint.textSize * 0.35f)
+                canvas.drawText(citationText, layout.citationCxPx, footerY, footerPaint)
             }
-            val maxFooterWidth = (safeW - 208f * uiScale).coerceAtLeast(32f)
-            var citationText = item.getConciseCitation()
-            if (footerPaint.measureText(citationText) > maxFooterWidth) {
-                val count = footerPaint.breakText(citationText, true, maxFooterWidth - 16f * layoutScale, null)
-                citationText = citationText.take(count).trimEnd() + "…"
-            }
-            val footerY = barCenterY + (footerPaint.textSize * 0.34f)
-            canvas.drawText(citationText, safeW / 2f, footerY, footerPaint)
         } else {
-            // Pure Export/Compact Mode: Citation only, full width
+            // Compact Mode: Citation only, full width - enhanced contrast and legibility
             val footerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(205, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
-                textSize = 19.5f * layoutScale
+                color = Color.argb(240, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
+                textSize = (18f * layout.scaleFactor).coerceIn(12.5f, 23f)
                 typeface = customTypeface
                 textAlign = Paint.Align.CENTER
+                setShadowLayer(3.5f * layout.scaleFactor, 0f, 1f * layout.scaleFactor, Color.argb(160, 0, 0, 0))
             }
 
-            val maxFooterWidth = (safeW - 72f * layoutScale).coerceAtLeast(32f)
+            val maxFooterWidth = (safeW - 48f).coerceAtLeast(32f)
             var citationText = item.getConciseCitation()
             if (footerPaint.measureText(citationText) > maxFooterWidth) {
-                val count = footerPaint.breakText(citationText, true, maxFooterWidth - 18f * layoutScale, null)
+                val count = footerPaint.breakText(citationText, true, maxFooterWidth - 16f, null)
                 citationText = citationText.take(count).trimEnd() + "…"
             }
-            val footerY = safeH - 22f * layoutScale
+            val footerY = safeH - 18f
             canvas.drawText(citationText, safeW / 2f, footerY, footerPaint)
         }
 
@@ -783,52 +784,49 @@ object GlassRenderer {
         canvas.drawCircle(rx, by, dotR, dotPaint)
     }
 
-    private fun drawSkipNextIcon(
+    private fun drawTasbeehIcon(
         canvas: Canvas,
         cx: Float,
         cy: Float,
         size: Float,
-        textColor: Int
+        accentColor: Int
     ) {
-        // Left-pointing chevron + bar (natural RTL "next/skip" direction)
-        val iconColor = Color.argb(225, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = (size * 0.22f).coerceAtLeast(1.6f)
+            strokeWidth = (size * 0.17f).coerceAtLeast(1.4f)
             strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
-            color = iconColor
+            color = Color.argb(230, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
         }
-        val path = Path().apply {
-            moveTo(cx + size * 0.42f, cy - size * 0.55f)
-            lineTo(cx - size * 0.18f, cy)
-            lineTo(cx + size * 0.42f, cy + size * 0.55f)
+        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = Color.argb(240, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
         }
-        canvas.drawPath(path, paint)
-        canvas.drawLine(cx - size * 0.48f, cy - size * 0.50f, cx - size * 0.48f, cy + size * 0.50f, paint)
+        val r = size * 0.55f
+        canvas.drawCircle(cx, cy - r * 0.50f, size * 0.22f, dotPaint)
+        canvas.drawCircle(cx - r * 0.65f, cy, size * 0.20f, dotPaint)
+        canvas.drawCircle(cx + r * 0.65f, cy, size * 0.20f, dotPaint)
+        canvas.drawCircle(cx, cy + r * 0.50f, size * 0.22f, dotPaint)
+        canvas.drawArc(RectF(cx - r, cy - r * 0.85f, cx + r, cy + r * 0.85f), 0f, 360f, false, strokePaint)
+        canvas.drawLine(cx, cy + r * 0.65f, cx, cy + r * 1.30f, strokePaint)
     }
 
     private fun drawRepetitionPill(
         canvas: Canvas,
         centerX: Float,
         centerY: Float,
-        scale: Float,
+        pillW: Float,
+        pillH: Float,
         currentRepetition: Int,
         targetRepetition: Int,
         textColor: Int,
         accentColor: Int,
         typeface: Typeface
     ) {
-        val label = "${ZekrRepository.toArabicDigits(currentRepetition)} / ${ZekrRepository.toArabicDigits(targetRepetition)}"
-        val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(240, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
-            textSize = 16.5f * scale
-            this.typeface = typeface
-            textAlign = Paint.Align.CENTER
+        val label = if (currentRepetition > 0) {
+            "مسبحة ${ZekrRepository.toArabicDigits(currentRepetition)}/${ZekrRepository.toArabicDigits(targetRepetition)}"
+        } else {
+            "مسبحة (${ZekrRepository.toArabicDigits(targetRepetition)})"
         }
-        val textW = textPaint.measureText(label)
-        val pillW = (textW + 30f * scale).coerceAtLeast(74f * scale)
-        val pillH = 26f * scale
         val pillRect = RectF(
             centerX - pillW / 2f,
             centerY - pillH / 2f,
@@ -839,7 +837,7 @@ object GlassRenderer {
 
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = Color.argb(42, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
+            color = Color.argb(65, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
         }
         canvas.drawRoundRect(pillRect, radius, radius, bgPaint)
 
@@ -851,7 +849,7 @@ object GlassRenderer {
             canvas.clipPath(pillClip)
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
-                color = Color.argb(95, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
+                color = Color.argb(120, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
             }
             val fillWidth = pillW * progress
             // Fill right-to-left for Arabic
@@ -867,13 +865,30 @@ object GlassRenderer {
 
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = (1.2f * scale).coerceAtLeast(1f)
-            color = Color.argb(72, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
+            strokeWidth = 1.4f
+            color = Color.argb(160, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
         }
         canvas.drawRoundRect(pillRect, radius, radius, borderPaint)
 
+        // Draw miniature 3-bead tasbeeh icon on the right side of the pill
+        val beadColor = Color.argb(240, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
+        val beadPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = beadColor
+        }
+        val iconRightX = pillRect.right - 14f
+        canvas.drawCircle(iconRightX, centerY, 3f, beadPaint)
+        canvas.drawCircle(iconRightX - 5.5f, centerY - 2.5f, 2.4f, beadPaint)
+        canvas.drawCircle(iconRightX - 11f, centerY, 2.2f, beadPaint)
+
+        val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(250, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
+            textSize = (pillH * 0.52f).coerceIn(11.5f, 18f)
+            this.typeface = typeface
+            textAlign = Paint.Align.CENTER
+        }
         val baseline = centerY + (textPaint.textSize * 0.34f)
-        canvas.drawText(label, centerX, baseline, textPaint)
+        canvas.drawText(label, centerX - 5f, baseline, textPaint)
     }
 
     private fun drawPinBadge(

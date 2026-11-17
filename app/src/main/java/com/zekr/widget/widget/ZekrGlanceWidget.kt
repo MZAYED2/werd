@@ -21,6 +21,10 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.action.Action
+import android.content.Intent
+import com.zekr.widget.ui.tasbeeh.TasbeehDialogActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.currentState
@@ -29,6 +33,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
@@ -45,6 +50,8 @@ import com.zekr.widget.data.preferences.WidgetPreferencesRepository
 import com.zekr.widget.data.preferences.WidgetSettings
 import com.zekr.widget.data.repository.ZekrRepository
 import com.zekr.widget.widget.render.GlassRenderer
+import com.zekr.widget.widget.render.WidgetLayout
+import com.zekr.widget.widget.render.WidgetLayoutGeometry
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -83,7 +90,7 @@ class ZekrGlanceWidget : GlanceAppWidget() {
         ) {
             val appContext = context.applicationContext
             val prefRepo = WidgetPreferencesRepository(appContext)
-            val settings = newSettings ?: prefRepo.getSettings()
+            val globalSettings = newSettings ?: prefRepo.getSettings()
             val targetItemId = specificItemId ?: prefRepo.getCurrentItemId()
             val repCount = prefRepo.getCurrentRepetitionCount()
             val favoriteIds = prefRepo.getFavoriteIds()
@@ -97,6 +104,15 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                 val glanceIds = manager.getGlanceIds(ZekrGlanceWidget::class.java)
 
                 for (glanceId in glanceIds) {
+                    val appWidgetId = runCatching { manager.getAppWidgetId(glanceId) }.getOrDefault(0)
+                    val settings = if (newSettings != null) {
+                        newSettings
+                    } else if (appWidgetId > 0) {
+                        prefRepo.getSettingsForWidget(appWidgetId)
+                    } else {
+                        globalSettings
+                    }
+
                     updateAppWidgetState(appContext, glanceId) { prefs ->
                         prefs[KEY_ZEKR_ID] = targetItemId
                         prefs[KEY_COLOR_PRESET] = settings.colorPreset.id
@@ -120,6 +136,53 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+            }
+        }
+
+        suspend fun updateWidgetInstance(
+            context: Context,
+            appWidgetId: Int,
+            settings: WidgetSettings
+        ) {
+            val appContext = context.applicationContext
+            val prefRepo = WidgetPreferencesRepository(appContext)
+            prefRepo.saveSettingsForWidget(appWidgetId, settings)
+
+            try {
+                val manager = GlanceAppWidgetManager(appContext)
+                val glanceId = manager.getGlanceIdBy(appWidgetId)
+                val targetItemId = prefRepo.getCurrentItemId()
+                val repCount = prefRepo.getCurrentRepetitionCount()
+                val favoriteIds = prefRepo.getFavoriteIds()
+                val pinnedId = prefRepo.getPinnedItemId()
+                val isFavorite = targetItemId in favoriteIds
+                val isPinned = pinnedId != null && pinnedId == targetItemId
+                val version = System.currentTimeMillis()
+
+                updateAppWidgetState(appContext, glanceId) { prefs ->
+                    prefs[KEY_ZEKR_ID] = targetItemId
+                    prefs[KEY_COLOR_PRESET] = settings.colorPreset.id
+                    prefs[KEY_IS_GRADIENT] = settings.isGradient
+                    prefs[KEY_PRIMARY_COLOR] = settings.primaryColor
+                    prefs[KEY_SECONDARY_COLOR] = settings.secondaryColor
+                    prefs[KEY_GRADIENT_DIRECTION] = settings.gradientDirection.id
+                    prefs[KEY_GLASS_OPACITY] = settings.glassOpacity
+                    prefs[KEY_BLUR_GRADE] = settings.blurGrade
+                    prefs[KEY_PATTERN] = settings.pattern.id
+                    prefs[KEY_PATTERN_OPACITY] = settings.patternOpacity
+                    prefs[KEY_PATTERN_SCALE] = settings.patternScale
+                    prefs[KEY_FONT] = settings.font.id
+                    prefs[KEY_FONT_SIZE] = settings.fontSizeSp
+                    prefs[KEY_CURRENT_REP_COUNT] = repCount
+                    prefs[KEY_IS_FAVORITE] = isFavorite
+                    prefs[KEY_IS_PINNED] = isPinned
+                    prefs[KEY_UPDATE_VERSION] = version
+                }
+                ZekrGlanceWidget().update(appContext, glanceId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Fallback to update all
+                updateAllWidgets(appContext, settings)
             }
         }
 
@@ -147,22 +210,14 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                 seenIds = seenIds
             )
             prefRepo.saveShuffleProgress(nextResult.item.id, nextResult.updatedSeenIds)
-            updateAllWidgets(context = appContext, newSettings = settings, specificItemId = nextResult.item.id)
+            updateAllWidgets(context = appContext, specificItemId = nextResult.item.id)
+            // Also notify lock screen widget if present
+            LockScreenZekrGlanceWidget.updateAll(appContext, specificItemId = nextResult.item.id)
         }
 
         suspend fun handleBodyTap(context: Context) {
             val appContext = context.applicationContext
-            val prefRepo = WidgetPreferencesRepository(appContext)
-            val currentId = prefRepo.getCurrentItemId()
-            val customItems = prefRepo.getCustomItems()
-            val currentItem = ZekrRepository.getById(appContext, currentId, customItems)
-
-            val tapResult = prefRepo.recordZekrTap(currentItem)
-            if (tapResult.reachedTarget && !tapResult.isPinned) {
-                shuffleToNext(appContext, clearPin = false)
-            } else {
-                updateAllWidgets(context = appContext, specificItemId = currentItem.id)
-            }
+            shuffleToNext(appContext, clearPin = false)
         }
     }
 
@@ -202,12 +257,22 @@ class ZekrGlanceWidget : GlanceAppWidget() {
             val item: ZekrEntity = ZekrRepository.getById(appContext, currentId, customItems)
 
             val widgetSize = LocalSize.current
+            val density = appContext.resources.displayMetrics.density
+            val widthDp = widgetSize.width.value
+            val heightDp = widgetSize.height.value
             val (bitmapW, bitmapH) = widgetBitmapPx(
-                widthDp = widgetSize.width.value,
-                heightDp = widgetSize.height.value,
-                density = appContext.resources.displayMetrics.density
+                widthDp = widthDp,
+                heightDp = heightDp,
+                density = density
             )
-            val showInteractiveBar = widgetSize.height.value >= 110f
+            val scaleFactor = (bitmapW.toFloat() / (widthDp * density)).coerceIn(0.2f, 5f)
+            val layout = WidgetLayoutGeometry.compute(
+                widthDp = widthDp,
+                heightDp = heightDp,
+                density = density,
+                scaleFactor = scaleFactor,
+                hasMultiRep = item.repetition > 1
+            )
 
             // Bitmap matches the widget aspect, so FillBounds scales both axes together.
             val fullWidgetBitmap = GlassRenderer.createFullWidgetBitmap(
@@ -231,10 +296,19 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                 currentRepetition = currentRepetition,
                 isFavorite = isFavorite,
                 isPinned = isPinned,
-                showInteractiveBar = showInteractiveBar
+                showInteractiveBar = layout.showInteractiveBar,
+                widthDp = widthDp,
+                heightDp = heightDp,
+                density = density
             )
 
             val isRtl = appContext.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+
+            val tasbeehIntent = Intent(appContext, TasbeehDialogActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(TasbeehDialogActivity.EXTRA_ZEKR_ID, item.id)
+            }
+            val tasbeehAction = actionStartActivity(tasbeehIntent)
 
             GlanceTheme {
                 Box(
@@ -248,9 +322,9 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                         modifier = GlanceModifier.fillMaxSize()
                     )
 
-                    if (showInteractiveBar) {
+                    if (layout.showInteractiveBar) {
                         Column(modifier = GlanceModifier.fillMaxSize()) {
-                            // Main Body Zone: Tap to count repetition / advance
+                            // Main Body Zone: Tap to advance / shuffle to next zekr
                             Box(
                                 modifier = GlanceModifier
                                     .fillMaxWidth()
@@ -258,11 +332,36 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                                     .clickable(actionRunCallback<TapZekrBodyAction>())
                             ) {}
 
-                            // Bottom Action Bar Zone aligned to physical canvas positions regardless of system LTR/RTL
-                            BottomTouchBar(isRtl = isRtl)
+                            // Dedicated Masbaha Button Zone when zekr has repetition
+                            if (item.repetition > 1) {
+                                Row(
+                                    modifier = GlanceModifier
+                                        .fillMaxWidth()
+                                        .height(layout.pillHeightDp.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = GlanceModifier
+                                            .width(layout.pillWidthDp.dp)
+                                            .fillMaxHeight()
+                                            .clickable(tasbeehAction)
+                                    ) {}
+                                }
+                                Spacer(modifier = GlanceModifier.height(4.dp))
+                            }
+
+                            // Bottom Action Bar Zone with the 3 buttons
+                            BottomTouchBar(
+                                isRtl = isRtl,
+                                layout = layout,
+                                tasbeehAction = tasbeehAction
+                            )
+
+                            Spacer(modifier = GlanceModifier.height(layout.bottomMarginDp.dp))
                         }
                     } else {
-                        // Compact Widget Fallback: single tap anywhere counts/advances
+                        // Compact Widget Fallback: single tap anywhere advances to next
                         Box(
                             modifier = GlanceModifier
                                 .fillMaxSize()
@@ -276,65 +375,78 @@ class ZekrGlanceWidget : GlanceAppWidget() {
 }
 
 @Composable
-private fun BottomTouchBar(isRtl: Boolean) {
+private fun BottomTouchBar(
+    isRtl: Boolean,
+    layout: WidgetLayout,
+    tasbeehAction: Action
+) {
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .height(48.dp),
+            .height(layout.barHeightDp.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isRtl) {
-            // RTL Row flows Right -> Left: [Favorite, Share, Center, Skip]
+            // In RTL, child 0 is on the RIGHT side: [Margin, Favorite, Share, Tasbeeh, Body]
+            Spacer(modifier = GlanceModifier.width(layout.rightMarginDp.dp))
+            // 1. Favorite (Rightmost)
             Box(
                 modifier = GlanceModifier
-                    .width(44.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(actionRunCallback<ToggleFavoriteWidgetAction>())
             ) {}
+            // 2. Share (Middle)
             Box(
                 modifier = GlanceModifier
-                    .width(44.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(actionRunCallback<ShareWidgetAction>())
             ) {}
+            // 3. Tasbeeh (Leftmost of the 3 buttons)
+            Box(
+                modifier = GlanceModifier
+                    .width(layout.buttonTouchSizeDp.dp)
+                    .fillMaxHeight()
+                    .clickable(tasbeehAction)
+            ) {}
+            // Space for citation and body touch on the left
             Box(
                 modifier = GlanceModifier
                     .defaultWeight()
                     .fillMaxHeight()
                     .clickable(actionRunCallback<TapZekrBodyAction>())
-            ) {}
-            Box(
-                modifier = GlanceModifier
-                    .width(48.dp)
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<SkipWidgetAction>())
             ) {}
         } else {
-            // LTR Row flows Left -> Right: [Skip, Center, Share, Favorite]
-            Box(
-                modifier = GlanceModifier
-                    .width(48.dp)
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<SkipWidgetAction>())
-            ) {}
+            // In LTR, child 0 is on the LEFT side: [Body, Tasbeeh, Share, Favorite, Margin]
             Box(
                 modifier = GlanceModifier
                     .defaultWeight()
                     .fillMaxHeight()
                     .clickable(actionRunCallback<TapZekrBodyAction>())
             ) {}
+            // 3. Tasbeeh (Leftmost of the 3 buttons)
             Box(
                 modifier = GlanceModifier
-                    .width(44.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
+                    .fillMaxHeight()
+                    .clickable(tasbeehAction)
+            ) {}
+            // 2. Share (Middle)
+            Box(
+                modifier = GlanceModifier
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(actionRunCallback<ShareWidgetAction>())
             ) {}
+            // 1. Favorite (Rightmost)
             Box(
                 modifier = GlanceModifier
-                    .width(44.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(actionRunCallback<ToggleFavoriteWidgetAction>())
             ) {}
+            Spacer(modifier = GlanceModifier.width(layout.rightMarginDp.dp))
         }
     }
 }

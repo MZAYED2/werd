@@ -12,9 +12,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.zekr.widget.data.model.WirdStats
 import com.zekr.widget.data.model.ZekrEntity
+import com.zekr.widget.data.repository.ZekrRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -52,13 +54,60 @@ object WidgetPreferenceKeys {
     val KEY_LAST_REP_TAP_MS = longPreferencesKey("pref_last_rep_tap_ms")
     val KEY_CUSTOM_ITEMS_JSON = stringPreferencesKey("pref_custom_items_json")
     val KEY_WIRD_STATS_JSON = stringPreferencesKey("pref_wird_stats_json")
+
+    // Smart Tasbeeh State & Persistent Counter
+    val KEY_LAST_TASBEEH_ZEKR_ID = intPreferencesKey("pref_last_tasbeeh_zekr_id")
+    val KEY_LAST_TASBEEH_COUNT = intPreferencesKey("pref_last_tasbeeh_count")
+    val KEY_LAST_TASBEEH_TARGET = intPreferencesKey("pref_last_tasbeeh_target")
+    val KEY_LAST_TASBEEH_FREE_MODE = booleanPreferencesKey("pref_last_tasbeeh_free_mode")
+    val KEY_TASBEEH_VIBRATION = booleanPreferencesKey("pref_tasbeeh_vibration")
+    val KEY_TASBEEH_SOUND = booleanPreferencesKey("pref_tasbeeh_sound")
+    val KEY_TASBEEH_DIALOG_SIZE = stringPreferencesKey("pref_tasbeeh_dialog_size")
+
+    fun widgetSettingsKey(widgetId: Int) = stringPreferencesKey("widget_instance_settings_$widgetId")
 }
+
+@Serializable
+enum class TasbeehDialogSize(val id: String, val titleAr: String) {
+    COMPACT("compact", "مدمج"),
+    MEDIUM("medium", "متوسط"),
+    LARGE("large", "كبير");
+
+    companion object {
+        fun fromId(id: String?): TasbeehDialogSize {
+            return values().find { it.id == id } ?: COMPACT
+        }
+    }
+}
+
+@Serializable
+data class TasbeehState(
+    val zekrId: Int = -1,
+    val count: Int = 0,
+    val target: Int = 33,
+    val isFreeMode: Boolean = false,
+    val vibrationEnabled: Boolean = true,
+    val soundEnabled: Boolean = true
+)
 
 data class TapProgressResult(
     val newRepCount: Int,
     val reachedTarget: Boolean,
     val isPinned: Boolean,
     val updatedStats: WirdStats
+)
+
+@Serializable
+data class UserDataBackup(
+    val version: Int = 1,
+    val exportedAt: Long = System.currentTimeMillis(),
+    val settings: WidgetSettings = WidgetSettings(),
+    val favoriteIds: List<Int> = emptyList(),
+    val pinnedItemId: Int? = null,
+    val customItems: List<ZekrEntity> = emptyList(),
+    val wirdStats: WirdStats = WirdStats(),
+    val tasbeehDialogSize: String = "compact",
+    val tasbeehState: TasbeehState = TasbeehState()
 )
 
 class WidgetPreferencesRepository(private val context: Context) {
@@ -155,7 +204,64 @@ class WidgetPreferencesRepository(private val context: Context) {
         decodeWirdStats(prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON].orEmpty())
     }
 
+    val tasbeehDialogSizeFlow: Flow<TasbeehDialogSize> = context.dataStore.data.map { prefs ->
+        TasbeehDialogSize.fromId(prefs[WidgetPreferenceKeys.KEY_TASBEEH_DIALOG_SIZE])
+    }
+
+    val tasbeehStateFlow: Flow<TasbeehState> = context.dataStore.data.map { prefs ->
+        TasbeehState(
+            zekrId = prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_ZEKR_ID] ?: -1,
+            count = prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] ?: 0,
+            target = prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_TARGET] ?: 33,
+            isFreeMode = prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_FREE_MODE] ?: false,
+            vibrationEnabled = prefs[WidgetPreferenceKeys.KEY_TASBEEH_VIBRATION] ?: true,
+            soundEnabled = prefs[WidgetPreferenceKeys.KEY_TASBEEH_SOUND] ?: true
+        )
+    }
+
+    suspend fun getTasbeehDialogSize(): TasbeehDialogSize = tasbeehDialogSizeFlow.first()
+
+    suspend fun setTasbeehDialogSize(size: TasbeehDialogSize) {
+        context.dataStore.edit { prefs ->
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_DIALOG_SIZE] = size.id
+        }
+    }
+
+    suspend fun getTasbeehState(): TasbeehState = tasbeehStateFlow.first()
+
     suspend fun getSettings(): WidgetSettings = settingsFlow.first()
+
+    suspend fun getSettingsForWidget(widgetId: Int): WidgetSettings {
+        if (widgetId <= 0) return getSettings()
+        val prefs = context.dataStore.data.first()
+        val key = WidgetPreferenceKeys.widgetSettingsKey(widgetId)
+        val raw = prefs[key]
+        if (!raw.isNullOrBlank()) {
+            runCatching { json.decodeFromString<WidgetSettings>(raw) }
+                .getOrNull()?.let { return it }
+        }
+        return getSettings()
+    }
+
+    suspend fun saveSettingsForWidget(widgetId: Int, settings: WidgetSettings) {
+        if (widgetId > 0) {
+            context.dataStore.edit { prefs ->
+                val key = WidgetPreferenceKeys.widgetSettingsKey(widgetId)
+                prefs[key] = json.encodeToString(settings)
+            }
+        } else {
+            updateSettings(settings)
+        }
+    }
+
+    suspend fun removeSettingsForWidget(widgetId: Int) {
+        if (widgetId > 0) {
+            context.dataStore.edit { prefs ->
+                val key = WidgetPreferenceKeys.widgetSettingsKey(widgetId)
+                prefs.remove(key)
+            }
+        }
+    }
 
     suspend fun getCurrentItemId(): Int = currentItemIdFlow.first()
 
@@ -340,14 +446,177 @@ class WidgetPreferencesRepository(private val context: Context) {
         return result
     }
 
+    suspend fun saveTasbeehProgress(
+        zekrId: Int,
+        count: Int,
+        target: Int,
+        isFreeMode: Boolean
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_ZEKR_ID] = zekrId
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] = count
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_TARGET] = target
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_FREE_MODE] = isFreeMode
+            val currentWidgetId = prefs[WidgetPreferenceKeys.KEY_CURRENT_ITEM_ID] ?: -1
+            if (currentWidgetId == zekrId) {
+                prefs[WidgetPreferenceKeys.KEY_CURRENT_REP_COUNT] = count
+                prefs[WidgetPreferenceKeys.KEY_LAST_REP_TAP_MS] = System.currentTimeMillis()
+            }
+        }
+    }
+
+    suspend fun setTasbeehPreferences(vibration: Boolean, sound: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_VIBRATION] = vibration
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_SOUND] = sound
+        }
+    }
+
+    /**
+     * Records one tap in the Tasbeeh counter (either from popup or full screen).
+     * Increments daily WirdStats total tasbeeh taps, updates last tasbeeh progress,
+     * and syncs widget repetition if the item is currently displayed on the widget.
+     */
+    suspend fun recordTasbeehTap(
+        item: ZekrEntity,
+        newCount: Int,
+        target: Int,
+        isFreeMode: Boolean
+    ): TapProgressResult {
+        var result = TapProgressResult(
+            newRepCount = newCount,
+            reachedTarget = !isFreeMode && newCount >= target,
+            isPinned = false,
+            updatedStats = WirdStats()
+        )
+        context.dataStore.edit { prefs ->
+            val reachedTarget = !isFreeMode && newCount >= target
+            val pinnedId = prefs[WidgetPreferenceKeys.KEY_PINNED_ITEM_ID]?.takeIf { it > 0 }
+            val isPinned = pinnedId != null && pinnedId == item.id
+
+            val stats = decodeWirdStats(prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON].orEmpty())
+            val updatedStats = stats.withRecordedTap(
+                itemType = item.type,
+                completedItem = reachedTarget
+            )
+            prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON] = json.encodeToString(updatedStats)
+
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_ZEKR_ID] = item.id
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] = newCount
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_TARGET] = target
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_FREE_MODE] = isFreeMode
+
+            val currentWidgetId = prefs[WidgetPreferenceKeys.KEY_CURRENT_ITEM_ID] ?: -1
+            if (currentWidgetId == item.id) {
+                prefs[WidgetPreferenceKeys.KEY_CURRENT_REP_COUNT] = newCount
+                prefs[WidgetPreferenceKeys.KEY_LAST_REP_TAP_MS] = System.currentTimeMillis()
+            }
+
+            result = TapProgressResult(
+                newRepCount = newCount,
+                reachedTarget = reachedTarget,
+                isPinned = isPinned,
+                updatedStats = updatedStats
+            )
+        }
+        return result
+    }
+
+    /**
+     * Smart Tasbeeh Context Resolver:
+     * 1. If displayed content has specific repetition (and not an Ayah), open on it with saved progress.
+     * 2. If displayed content is an Ayah or text not intended for tasbeeh (repetition <= 1),
+     *    open on the last zekr the user was making tasbeeh with.
+     * 3. If no previous zekr, open on default: "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ".
+     */
+    suspend fun resolveSmartTasbeehItem(
+        context: Context,
+        displayedItemId: Int = -1
+    ): Triple<ZekrEntity, Int, Int> {
+        val customItems = getCustomItems()
+        val allItems = ZekrRepository.getAllItems(context, customItems)
+        val state = getTasbeehState()
+
+        val candidate = if (displayedItemId > 0) {
+            ZekrRepository.getById(context, displayedItemId, customItems)
+        } else null
+
+        val isCandidateTasbeeh = candidate != null &&
+            candidate.type != com.zekr.widget.data.model.ContentType.QURAN_AYAH &&
+            (candidate.repetition > 1 || candidate.category == "التسبيح")
+
+        if (isCandidateTasbeeh && candidate != null) {
+            val target = candidate.repetition.coerceAtLeast(33)
+            val savedCount = if (state.zekrId == candidate.id) {
+                state.count
+            } else {
+                getCurrentRepetitionCount()
+            }
+            return Triple(candidate, savedCount, target)
+        }
+
+        // Candidate is Quran Ayah, Hadith without repetition, or non-tasbeeh text:
+        // Try to open on the last zekr user was making tasbeeh with
+        if (state.zekrId > 0) {
+            val lastItem = allItems.find { it.id == state.zekrId }
+            if (lastItem != null) {
+                val target = if (state.target > 0) state.target else lastItem.repetition.coerceAtLeast(33)
+                return Triple(lastItem, state.count, target)
+            }
+        }
+
+        // If no previous zekr, find default "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ"
+        val defaultItem = allItems.find {
+            it.arabicText.contains("سُبْحَانَ اللَّهِ وَبِحَمْدِهِ") &&
+                it.type != com.zekr.widget.data.model.ContentType.QURAN_AYAH
+        } ?: allItems.find { it.repetition > 1 } ?: allItems.first()
+
+        val defaultTarget = defaultItem.repetition.coerceAtLeast(100)
+        return Triple(defaultItem, 0, defaultTarget)
+    }
+
     suspend fun shouldPauseAutoShuffleOnUnlock(nowMs: Long = System.currentTimeMillis()): Boolean {
         val prefs = context.dataStore.data.first()
         val pinnedId = prefs[WidgetPreferenceKeys.KEY_PINNED_ITEM_ID]?.takeIf { it > 0 }
-        if (pinnedId != null) return true
+        return pinnedId != null
+    }
 
-        val currentRep = prefs[WidgetPreferenceKeys.KEY_CURRENT_REP_COUNT] ?: 0
-        val lastTapMs = prefs[WidgetPreferenceKeys.KEY_LAST_REP_TAP_MS] ?: 0L
-        return shouldPauseUnlockShuffle(currentRep, lastTapMs, pinnedId, nowMs)
+    suspend fun exportUserDataJson(): String {
+        val backup = UserDataBackup(
+            version = 1,
+            exportedAt = System.currentTimeMillis(),
+            settings = getSettings(),
+            favoriteIds = getFavoriteIds().toList(),
+            pinnedItemId = getPinnedItemId(),
+            customItems = getCustomItems(),
+            wirdStats = getWirdStats(),
+            tasbeehDialogSize = getTasbeehDialogSize().id,
+            tasbeehState = getTasbeehState()
+        )
+        return json.encodeToString(backup)
+    }
+
+    suspend fun importUserDataJson(rawJson: String): Result<Unit> = runCatching {
+        val backup = json.decodeFromString<UserDataBackup>(rawJson)
+        context.dataStore.edit { prefs ->
+            updateSettings(backup.settings)
+            prefs[WidgetPreferenceKeys.KEY_FAVORITE_IDS] = serializeIdSet(backup.favoriteIds.toSet())
+            if (backup.pinnedItemId != null && backup.pinnedItemId > 0) {
+                prefs[WidgetPreferenceKeys.KEY_PINNED_ITEM_ID] = backup.pinnedItemId
+            } else {
+                prefs.remove(WidgetPreferenceKeys.KEY_PINNED_ITEM_ID)
+            }
+            prefs[WidgetPreferenceKeys.KEY_CUSTOM_ITEMS_JSON] = json.encodeToString(backup.customItems)
+            prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON] = json.encodeToString(backup.wirdStats)
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_DIALOG_SIZE] = backup.tasbeehDialogSize
+
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_ZEKR_ID] = backup.tasbeehState.zekrId
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] = backup.tasbeehState.count
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_TARGET] = backup.tasbeehState.target
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_FREE_MODE] = backup.tasbeehState.isFreeMode
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_VIBRATION] = backup.tasbeehState.vibrationEnabled
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_SOUND] = backup.tasbeehState.soundEnabled
+        }
     }
 
     private fun decodeCustomItems(raw: String): List<ZekrEntity> {
@@ -372,11 +641,7 @@ class WidgetPreferencesRepository(private val context: Context) {
             pinnedItemId: Int?,
             nowMs: Long
         ): Boolean {
-            if (pinnedItemId != null && pinnedItemId > 0) return true
-            if (currentRepCount > 0 && lastTapMs > 0L && (nowMs - lastTapMs) < MID_PROGRESS_SHUFFLE_PAUSE_MS) {
-                return true
-            }
-            return false
+            return pinnedItemId != null && pinnedItemId > 0
         }
 
         internal fun parseIdSet(raw: String): Set<Int> {

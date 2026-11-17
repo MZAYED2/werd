@@ -27,9 +27,7 @@ keystore.properties
 .agents/
 .claude/
 .gemini/
-.cursor/hooks/
-.cursor/hooks.json
-.cursor/mcp.json
+.cursor/
 /scratch/
 /scratch_card_*.png
 /mobile_screen.png
