@@ -1,8 +1,15 @@
 package com.zekr.widget.ui.screens
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -135,6 +142,71 @@ fun HomeScreen(
     val customItems by (prefRepo?.customItemsFlow ?: remember { flowOf(emptyList()) }).collectAsState(initial = emptyList())
     val wirdStats by (prefRepo?.wirdStatsFlow ?: remember { flowOf(WirdStats()) }).collectAsState(initial = WirdStats())
     val notifSettings by (prefRepo?.notificationSettingsFlow ?: remember { flowOf(com.zekr.widget.data.preferences.NotificationSettings()) }).collectAsState(initial = com.zekr.widget.data.preferences.NotificationSettings())
+
+    var hasNotificationPermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        )
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotificationPermission = isGranted
+    }
+
+    fun openNotificationSettings() {
+        runCatching {
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } else {
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = "package:${context.packageName}".toUri()
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+            context.startActivity(intent)
+        }
+    }
+
+    fun requestNotificationPermissionOrOpenSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val currentGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (currentGranted) {
+                hasNotificationPermission = true
+            } else {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            openNotificationSettings()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!isPreview && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val isGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            hasNotificationPermission = isGranted
+            if (!isGranted) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     var localSettings by remember { mutableStateOf<WidgetSettings?>(null) }
     LaunchedEffect(widgetId) {
@@ -718,6 +790,13 @@ fun HomeScreen(
                                             prefRepo?.saveNotificationSettings(newNotif)
                                         }
                                     }
+                                },
+                                hasNotificationPermission = hasNotificationPermission,
+                                onRequestNotificationPermission = {
+                                    requestNotificationPermissionOrOpenSettings()
+                                },
+                                onOpenNotificationSettings = {
+                                    openNotificationSettings()
                                 },
                                 onTestReminder = {
                                     if (!isPreview) {
@@ -1650,6 +1729,9 @@ fun SettingsContentTabContent(
     onUpdateSettings: (WidgetSettings) -> Unit,
     notifSettings: com.zekr.widget.data.preferences.NotificationSettings = com.zekr.widget.data.preferences.NotificationSettings(),
     onUpdateNotifSettings: (com.zekr.widget.data.preferences.NotificationSettings) -> Unit = {},
+    hasNotificationPermission: Boolean = true,
+    onRequestNotificationPermission: () -> Unit = {},
+    onOpenNotificationSettings: () -> Unit = {},
     onTestReminder: () -> Unit = {},
     currentVersionName: String = "1.1",
     updateInfo: AppUpdateInfo? = null,
@@ -1668,6 +1750,53 @@ fun SettingsContentTabContent(
                 title = "التنبيهات والتذكيرات الذكية",
                 subtitle = "تذكيرات دورية لطيفة مع خيار «تم» لتأكيد الإنجاز و«فتح السبحة»"
             ) {
+                if (!hasNotificationPermission) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onRequestNotificationPermission() },
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFF59E0B).copy(alpha = 0.15f)
+                        ),
+                        border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(text = "🔔", fontSize = 22.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "إذن الإشعارات غير مفعّل",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFBBF24),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "اضغط هنا لمنح الإذن لتصلك تذكيرات الصلاة والتسبيح في موعدها",
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            TextButton(
+                                onClick = onOpenNotificationSettings,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "الإعدادات",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFFBBF24)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
+
                 // 1. Salawat
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1690,6 +1819,9 @@ fun SettingsContentTabContent(
                     Switch(
                         checked = notifSettings.salawatEnabled,
                         onCheckedChange = {
+                            if (it && !hasNotificationPermission) {
+                                onRequestNotificationPermission()
+                            }
                             onUpdateNotifSettings(notifSettings.copy(salawatEnabled = it))
                         }
                     )
@@ -1719,6 +1851,9 @@ fun SettingsContentTabContent(
                     Switch(
                         checked = notifSettings.tasbeehEnabled,
                         onCheckedChange = {
+                            if (it && !hasNotificationPermission) {
+                                onRequestNotificationPermission()
+                            }
                             onUpdateNotifSettings(notifSettings.copy(tasbeehEnabled = it))
                         }
                     )
@@ -1748,6 +1883,9 @@ fun SettingsContentTabContent(
                     Switch(
                         checked = notifSettings.wirdEnabled,
                         onCheckedChange = {
+                            if (it && !hasNotificationPermission) {
+                                onRequestNotificationPermission()
+                            }
                             onUpdateNotifSettings(notifSettings.copy(wirdEnabled = it))
                         }
                     )
@@ -1767,18 +1905,18 @@ fun SettingsContentTabContent(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "${notifSettings.dailyCount} مرات يومياً",
+                            text = "${notifSettings.dailyCount} ${if (notifSettings.dailyCount in 3..10) "مرات" else "مرة"} يومياً",
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
                     Slider(
-                        value = notifSettings.dailyCount.toFloat(),
+                        value = notifSettings.dailyCount.toFloat().coerceIn(1f, 20f),
                         onValueChange = {
-                            onUpdateNotifSettings(notifSettings.copy(dailyCount = it.toInt()))
+                            onUpdateNotifSettings(notifSettings.copy(dailyCount = it.toInt().coerceIn(1, 20)))
                         },
-                        valueRange = 1f..5f,
-                        steps = 3
+                        valueRange = 1f..20f,
+                        steps = 18
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))

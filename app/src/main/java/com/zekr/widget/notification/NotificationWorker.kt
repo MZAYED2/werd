@@ -77,16 +77,20 @@ object NotificationScheduler {
             return
         }
 
-        val intervalHours = when (settings.dailyCount) {
-            1 -> 12L
-            2 -> 6L
-            3 -> 4L
-            else -> 3L
+        val intervalMinutes = when {
+            settings.dailyCount <= 1 -> 720L
+            settings.dailyCount == 2 -> 360L
+            settings.dailyCount == 3 -> 240L
+            settings.dailyCount == 4 -> 180L
+            settings.dailyCount in 5..6 -> 120L
+            settings.dailyCount in 7..10 -> 60L
+            settings.dailyCount in 11..15 -> 45L
+            else -> 30L
         }
 
         val request = PeriodicWorkRequestBuilder<NotificationWorker>(
-            intervalHours,
-            TimeUnit.HOURS
+            intervalMinutes,
+            TimeUnit.MINUTES
         ).build()
 
         WorkManager.getInstance(appContext).enqueueUniquePeriodicWork(

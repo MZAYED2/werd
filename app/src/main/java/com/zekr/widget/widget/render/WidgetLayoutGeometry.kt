@@ -115,20 +115,20 @@ object WidgetLayoutGeometry {
         val citationCenterXDp = leftMarginDp + (maxCitationWidthDp / 2f)
         val citationCenterYDp = barCenterYDp
 
-        // Arabic Zekr Text area - guaranteed collision-free
+        // Arabic Zekr Text area - guaranteed collision-free with optimal vertical and horizontal breathing room
         val reservedBottomDp = when {
-            !showInteractiveBar -> 24f
-            canShowPill -> barHeightDp + bottomMarginDp + pillHeightDp + 10f
-            else -> barHeightDp + bottomMarginDp + (if (isCompactHeight) 2f else 6f)
+            !showInteractiveBar -> 8f
+            canShowPill -> barHeightDp + bottomMarginDp + pillHeightDp + 6f
+            else -> barHeightDp + bottomMarginDp + (if (isCompactHeight) 2f else 4f)
         }
         val textTopPaddingDp = when {
-            safeH > 160f -> 14f
+            safeH > 160f -> 12f
             isCompactHeight -> 4f
-            else -> 8f
+            else -> 6f
         }
-        val availableTextHeightDp = (safeH - textTopPaddingDp - reservedBottomDp).coerceAtLeast(28f)
-        val textHorizontalPaddingDp = (safeW * 0.06f).coerceIn(10f, 24f)
-        val maxTextWidthDp = (safeW - (textHorizontalPaddingDp * 2f)).coerceAtLeast(50f)
+        val availableTextHeightDp = (safeH - textTopPaddingDp - reservedBottomDp).coerceAtLeast(30f)
+        val textHorizontalPaddingDp = (safeW * 0.05f).coerceIn(10f, 20f)
+        val maxTextWidthDp = (safeW - (textHorizontalPaddingDp * 2f)).coerceAtLeast(60f)
 
         return WidgetLayout(
             widthDp = safeW,

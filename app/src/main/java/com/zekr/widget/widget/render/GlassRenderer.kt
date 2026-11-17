@@ -11,8 +11,10 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.os.Build
 import android.text.Layout
 import android.text.StaticLayout
+import android.text.TextDirectionHeuristics
 import android.text.TextPaint
 import android.text.TextUtils
 import com.zekr.widget.data.model.ZekrEntity
@@ -536,10 +538,9 @@ object GlassRenderer {
         ).toInt()
         val customTypeface = FontHelper.getTypeface(context, font)
 
-        // 1. Arabic Zekr Text (Center) using unified geometry
+        // 1. Arabic Zekr Text (Center) using unified geometry and adaptive font sizing
         val maxTextWidth = layout.maxTextWidthPx.roundToInt().coerceAtLeast(32)
-        val availableHeightForZekr = layout.availableTextHeightPx.coerceAtLeast(40f)
-        val minTextSize = 13f * layout.toPx(1f)
+        val availableHeightForZekr = layout.availableTextHeightPx.coerceAtLeast(30f)
 
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = textColor
@@ -548,57 +549,75 @@ object GlassRenderer {
 
         val displayText = item.getFormattedArabicText()
 
-        var currentTextSize = fontSizeSp * 1.95f * layout.toPx(1f)
-        textPaint.textSize = currentTextSize
+        // Adaptive font sizing:
+        // Prioritize displaying the full text across multiple natural wrapping lines without truncation.
+        // Base target size is derived from user's fontSizeSp and display density.
+        val baseTargetSizePx = fontSizeSp * 1.15f * layout.toPx(1f)
+        val minReadableSizePx = 9.0f * layout.toPx(1f) // 9sp minimum readable threshold
 
-        var staticLayout: StaticLayout
-        while (true) {
-            staticLayout = StaticLayout.Builder.obtain(
-                displayText, 0, displayText.length, textPaint, maxTextWidth
-            )
-                .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .setLineSpacing(3f * layout.scaleFactor, 1.20f)
-                .setIncludePad(false)
-                .build()
+        // Binary search for largest font size where the full wrapped text fits available width and height
+        var low = minReadableSizePx
+        var high = baseTargetSizePx
+        var bestSize = low
+        var bestLayout: StaticLayout = createArabicStaticLayout(displayText, textPaint.apply { textSize = low }, maxTextWidth, layout.scaleFactor)
 
-            if (staticLayout.height <= availableHeightForZekr || currentTextSize <= minTextSize) {
-                break
+        if (bestLayout.height <= availableHeightForZekr) {
+            // Text can fit completely! Find the optimal largest size
+            bestSize = low
+            for (step in 0..14) {
+                val mid = (low + high) / 2f
+                textPaint.textSize = mid
+                val candidateLayout = createArabicStaticLayout(displayText, textPaint, maxTextWidth, layout.scaleFactor)
+
+                // Ensure candidate fits height and no word overflows layout width
+                var lineOverflow = false
+                for (i in 0 until candidateLayout.lineCount) {
+                    if (candidateLayout.getLineWidth(i) > maxTextWidth) {
+                        lineOverflow = true
+                        break
+                    }
+                }
+
+                if (candidateLayout.height <= availableHeightForZekr && !lineOverflow) {
+                    bestSize = mid
+                    bestLayout = candidateLayout
+                    low = mid // try larger for better legibility
+                } else {
+                    high = mid // try smaller to prevent overflow
+                }
             }
-            currentTextSize = (currentTextSize - 1.2f * layout.scaleFactor).coerceAtLeast(minTextSize)
-            textPaint.textSize = currentTextSize
-        }
-
-        // Long text boundary protection
-        if (staticLayout.height > availableHeightForZekr) {
-            var fittedLines = 0
-            for (i in 0 until staticLayout.lineCount) {
-                if (staticLayout.getLineBottom(i) <= availableHeightForZekr) {
-                    fittedLines = i + 1
+        } else {
+            // Text is exceptionally long and exceeds availableHeightForZekr even at minimum readable size (9sp)
+            // As an absolute last resort on tiny widget sizes, fit as many complete lines as can physically fit
+            // without ever forcing single-line cutoffs.
+            var fittingLines = 0
+            for (i in 0 until bestLayout.lineCount) {
+                if (bestLayout.getLineBottom(i) <= availableHeightForZekr) {
+                    fittingLines = i + 1
                 } else {
                     break
                 }
             }
-            val safeLines = fittedLines.coerceAtLeast(1)
-            staticLayout = StaticLayout.Builder.obtain(
-                displayText, 0, displayText.length, textPaint, maxTextWidth
+            val safeLines = fittingLines.coerceAtLeast(1)
+            textPaint.textSize = minReadableSizePx
+            bestLayout = createArabicStaticLayout(
+                text = displayText,
+                paint = textPaint,
+                widthPx = maxTextWidth,
+                scaleFactor = layout.scaleFactor,
+                maxLines = safeLines,
+                ellipsize = TextUtils.TruncateAt.END
             )
-                .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .setLineSpacing(3f * layout.scaleFactor, 1.20f)
-                .setIncludePad(false)
-                .setMaxLines(safeLines)
-                .setEllipsize(TextUtils.TruncateAt.END)
-                .setEllipsizedWidth(maxTextWidth)
-                .build()
         }
 
         val topPadding = layout.textTopPaddingPx
         val centerY = topPadding + (availableHeightForZekr / 2f)
-        val startY = (centerY - (staticLayout.height / 2f)).coerceAtLeast(topPadding)
+        val startY = (centerY - (bestLayout.height / 2f)).coerceAtLeast(topPadding)
         val startX = (safeW - maxTextWidth) / 2f
 
         canvas.save()
         canvas.translate(startX, startY)
-        staticLayout.draw(canvas)
+        bestLayout.draw(canvas)
         canvas.restore()
 
         // Optional subtle pin badge in top-left corner when zekr is pinned
@@ -961,5 +980,45 @@ object GlassRenderer {
             color = accentColor
         }
         canvas.drawCircle(cx, cy, r * 0.42f, dot)
+    }
+
+    /**
+     * Builds a StaticLayout with full Arabic RTL, balanced paragraph wrapping,
+     * and proper padding for Tashkeel marks without clipping.
+     */
+    fun createArabicStaticLayout(
+        text: CharSequence,
+        paint: TextPaint,
+        widthPx: Int,
+        scaleFactor: Float,
+        maxLines: Int = Int.MAX_VALUE,
+        ellipsize: TextUtils.TruncateAt? = null
+    ): StaticLayout {
+        val safeWidth = widthPx.coerceAtLeast(32)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val builder = StaticLayout.Builder.obtain(text, 0, text.length, paint, safeWidth)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .setTextDirection(TextDirectionHeuristics.ANYRTL_LTR)
+                .setLineSpacing(2f * scaleFactor, 1.15f)
+                .setBreakStrategy(Layout.BREAK_STRATEGY_BALANCED)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+                .setIncludePad(true)
+
+            if (maxLines < Int.MAX_VALUE) {
+                builder.setMaxLines(maxLines)
+            }
+            if (ellipsize != null) {
+                builder.setEllipsize(ellipsize)
+                builder.setEllipsizedWidth(safeWidth)
+            }
+            builder.build()
+        } else {
+            @Suppress("DEPRECATION")
+            StaticLayout(
+                text, paint, safeWidth,
+                Layout.Alignment.ALIGN_CENTER,
+                1.15f, 2f * scaleFactor, true
+            )
+        }
     }
 }

@@ -630,4 +630,45 @@ class WidgetVerificationTest {
         assertTrue(formatted.contains("صحيح البخاري: 6406"))
         assertTrue(formatted.contains("كتاب الدعوات"))
     }
+
+    @Test
+    fun testWidgetLayoutGeometryGuaranteesTextSpaceAcrossSizes() {
+        val sizes = listOf(
+            Pair(160f, 80f),   // 2x1 compact
+            Pair(240f, 100f),  // 3x1
+            Pair(340f, 100f),  // 4x1 wide
+            Pair(340f, 160f),  // 4x2 standard
+            Pair(340f, 240f)   // 4x3 tall
+        )
+
+        for ((wDp, hDp) in sizes) {
+            val layoutNoRep = com.zekr.widget.widget.render.WidgetLayoutGeometry.compute(
+                widthDp = wDp,
+                heightDp = hDp,
+                density = 2.75f,
+                hasMultiRep = false
+            )
+            assertTrue("Text height must be >= 30dp for size ${wDp}x${hDp}", layoutNoRep.availableTextHeightDp >= 30f)
+            assertTrue("Text width must be >= 60dp for size ${wDp}x${hDp}", layoutNoRep.maxTextWidthDp >= 60f)
+            assertTrue("Text width must fit within widget width", layoutNoRep.maxTextWidthDp < wDp)
+
+            // When interactive bar is shown, ensure text area does not collide with bottom bar
+            if (layoutNoRep.showInteractiveBar) {
+                val textBottomDp = layoutNoRep.textTopPaddingDp + layoutNoRep.availableTextHeightDp
+                val barTopDp = hDp - layoutNoRep.bottomMarginDp - layoutNoRep.barHeightDp
+                assertTrue(
+                    "Text bottom ($textBottomDp) must be above bar top ($barTopDp) on size ${wDp}x${hDp}",
+                    textBottomDp <= barTopDp + 0.5f
+                )
+            }
+
+            val layoutWithRep = com.zekr.widget.widget.render.WidgetLayoutGeometry.compute(
+                widthDp = wDp,
+                heightDp = hDp,
+                density = 2.75f,
+                hasMultiRep = true
+            )
+            assertTrue("Multi-rep text height must be >= 30dp", layoutWithRep.availableTextHeightDp >= 30f)
+        }
+    }
 }

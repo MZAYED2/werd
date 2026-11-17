@@ -39,8 +39,8 @@ object ZekrRepository {
 
         return try {
             context.assets.open("data/sahih_content.json").use { stream ->
-                val reader = InputStreamReader(stream)
-                val content = reader.readText()
+                val reader = InputStreamReader(stream, Charsets.UTF_8)
+                val content = reader.readText().removePrefix("\uFEFF").trim()
                 val parsed = json.decodeFromString<List<ZekrEntity>>(content)
                 cachedItems = parsed
                 parsed

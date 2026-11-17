@@ -261,7 +261,7 @@ class WidgetPreferencesRepository(private val context: Context) {
             salawatEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_SALAWAT_ENABLED] ?: true,
             tasbeehEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_TASBEEH_ENABLED] ?: true,
             wirdEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_WIRD_ENABLED] ?: true,
-            dailyCount = (prefs[WidgetPreferenceKeys.KEY_NOTIF_COUNT_PER_DAY] ?: 3).coerceIn(1, 10),
+            dailyCount = (prefs[WidgetPreferenceKeys.KEY_NOTIF_COUNT_PER_DAY] ?: 3).coerceIn(1, 20),
             startHour = (prefs[WidgetPreferenceKeys.KEY_NOTIF_START_HOUR] ?: 8).coerceIn(0, 23),
             endHour = (prefs[WidgetPreferenceKeys.KEY_NOTIF_END_HOUR] ?: 22).coerceIn(0, 23),
             quietHoursEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_QUIET_HOURS_ENABLED] ?: true
@@ -303,7 +303,7 @@ class WidgetPreferencesRepository(private val context: Context) {
             prefs[WidgetPreferenceKeys.KEY_NOTIF_SALAWAT_ENABLED] = settings.salawatEnabled
             prefs[WidgetPreferenceKeys.KEY_NOTIF_TASBEEH_ENABLED] = settings.tasbeehEnabled
             prefs[WidgetPreferenceKeys.KEY_NOTIF_WIRD_ENABLED] = settings.wirdEnabled
-            prefs[WidgetPreferenceKeys.KEY_NOTIF_COUNT_PER_DAY] = settings.dailyCount.coerceIn(1, 10)
+            prefs[WidgetPreferenceKeys.KEY_NOTIF_COUNT_PER_DAY] = settings.dailyCount.coerceIn(1, 20)
             prefs[WidgetPreferenceKeys.KEY_NOTIF_START_HOUR] = settings.startHour.coerceIn(0, 23)
             prefs[WidgetPreferenceKeys.KEY_NOTIF_END_HOUR] = settings.endHour.coerceIn(0, 23)
             prefs[WidgetPreferenceKeys.KEY_NOTIF_QUIET_HOURS_ENABLED] = settings.quietHoursEnabled
@@ -808,7 +808,8 @@ class WidgetPreferencesRepository(private val context: Context) {
             pinnedItemId: Int?,
             nowMs: Long
         ): Boolean {
-            return pinnedItemId != null && pinnedItemId > 0
+            return (pinnedItemId != null && pinnedItemId > 0) ||
+                (currentRepCount > 0 && (nowMs - lastTapMs) < MID_PROGRESS_SHUFFLE_PAUSE_MS)
         }
 
         internal fun parseIdSet(raw: String): Set<Int> {
