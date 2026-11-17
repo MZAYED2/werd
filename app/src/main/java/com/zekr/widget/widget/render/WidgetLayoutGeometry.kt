@@ -100,10 +100,11 @@ object WidgetLayoutGeometry {
         val shareCenterXDp = safeW - rightMarginDp - buttonTouchSizeDp - (buttonTouchSizeDp / 2f)
         val tasbeehCenterXDp = safeW - rightMarginDp - (2f * buttonTouchSizeDp) - (buttonTouchSizeDp / 2f)
 
-        // Repetition pill (above the bottom bar when zekr has repetition and space permits)
-        val canShowPill = hasMultiRep && safeH >= 140f
-        val pillHeightDp = 28f
-        val pillWidthDp = 130f.coerceAtMost(safeW - 40f)
+        // Repetition pill: ONLY when height is generous (>= 150dp) AND widget is wide enough (>= 220dp)
+        // In thin or compact heights, repetition is integrated directly with the citation text so text is never overlapped
+        val canShowPill = hasMultiRep && safeH >= 150f && safeW >= 220f
+        val pillHeightDp = 26f
+        val pillWidthDp = 125f.coerceAtMost(safeW - 40f)
         val pillCenterXDp = safeW / 2f
         val pillCenterYDp = barCenterYDp - (barHeightDp / 2f) - (pillHeightDp / 2f) - 4f
 
@@ -114,19 +115,19 @@ object WidgetLayoutGeometry {
         val citationCenterXDp = leftMarginDp + (maxCitationWidthDp / 2f)
         val citationCenterYDp = barCenterYDp
 
-        // Arabic Zekr Text area
+        // Arabic Zekr Text area - guaranteed collision-free
         val reservedBottomDp = when {
-            !showInteractiveBar -> 28f
+            !showInteractiveBar -> 24f
             canShowPill -> barHeightDp + bottomMarginDp + pillHeightDp + 10f
-            else -> barHeightDp + bottomMarginDp + (if (isCompactHeight) 2f else 8f)
+            else -> barHeightDp + bottomMarginDp + (if (isCompactHeight) 2f else 6f)
         }
         val textTopPaddingDp = when {
-            safeH > 160f -> 16f
+            safeH > 160f -> 14f
             isCompactHeight -> 4f
             else -> 8f
         }
-        val availableTextHeightDp = (safeH - textTopPaddingDp - reservedBottomDp).coerceAtLeast(30f)
-        val textHorizontalPaddingDp = (safeW * 0.06f).coerceIn(10f, 26f)
+        val availableTextHeightDp = (safeH - textTopPaddingDp - reservedBottomDp).coerceAtLeast(28f)
+        val textHorizontalPaddingDp = (safeW * 0.06f).coerceIn(10f, 24f)
         val maxTextWidthDp = (safeW - (textHorizontalPaddingDp * 2f)).coerceAtLeast(50f)
 
         return WidgetLayout(

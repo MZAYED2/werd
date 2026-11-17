@@ -546,13 +546,15 @@ object GlassRenderer {
             typeface = customTypeface
         }
 
+        val displayText = item.getFormattedArabicText()
+
         var currentTextSize = fontSizeSp * 1.95f * layout.toPx(1f)
         textPaint.textSize = currentTextSize
 
         var staticLayout: StaticLayout
         while (true) {
             staticLayout = StaticLayout.Builder.obtain(
-                item.arabicText, 0, item.arabicText.length, textPaint, maxTextWidth
+                displayText, 0, displayText.length, textPaint, maxTextWidth
             )
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)
                 .setLineSpacing(3f * layout.scaleFactor, 1.20f)
@@ -578,7 +580,7 @@ object GlassRenderer {
             }
             val safeLines = fittedLines.coerceAtLeast(1)
             staticLayout = StaticLayout.Builder.obtain(
-                item.arabicText, 0, item.arabicText.length, textPaint, maxTextWidth
+                displayText, 0, displayText.length, textPaint, maxTextWidth
             )
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)
                 .setLineSpacing(3f * layout.scaleFactor, 1.20f)
@@ -626,8 +628,8 @@ object GlassRenderer {
             drawActionButtonPill(canvas, layout.tasbeehCxPx, barCenterY, btnRadius, accentColor, highlighted = false)
             drawTasbeehIcon(canvas, layout.tasbeehCxPx, barCenterY, btnRadius * 0.56f, accentColor)
 
-            // Repetition Progress Pill (when repetition > 1)
-            if (item.repetition > 1) {
+            // Repetition Progress Pill (ONLY when layout allows and height is generous)
+            if (layout.hasMultiRep && item.repetition > 1) {
                 drawRepetitionPill(
                     canvas = canvas,
                     centerX = layout.pillCxPx,
@@ -651,7 +653,18 @@ object GlassRenderer {
                     textAlign = Paint.Align.CENTER
                     setShadowLayer(3.5f * layout.scaleFactor, 0f, 1f * layout.scaleFactor, Color.argb(160, 0, 0, 0))
                 }
-                var citationText = item.getConciseCitation()
+                // In thin widgets, integrate the repetition count compactly into the citation
+                var citationText = if (!layout.hasMultiRep && item.repetition > 1) {
+                    val repLabel = if (currentRepetition > 0) {
+                        "${ZekrRepository.toArabicDigits(currentRepetition)}/${ZekrRepository.toArabicDigits(item.repetition)}"
+                    } else {
+                        "${ZekrRepository.toArabicDigits(item.repetition)}x"
+                    }
+                    "${item.getConciseCitation()} • $repLabel"
+                } else {
+                    item.getConciseCitation()
+                }
+
                 if (footerPaint.measureText(citationText) > layout.maxCitationWidthPx) {
                     val count = footerPaint.breakText(citationText, true, layout.maxCitationWidthPx - 8f, null)
                     citationText = citationText.take(count).trimEnd() + "…"
@@ -791,23 +804,61 @@ object GlassRenderer {
         size: Float,
         accentColor: Int
     ) {
+        val color = Color.argb(235, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
         val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = (size * 0.17f).coerceAtLeast(1.4f)
+            strokeWidth = (size * 0.14f).coerceAtLeast(1.5f)
             strokeCap = Paint.Cap.ROUND
-            color = Color.argb(230, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
+            this.color = color
         }
-        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val beadPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = Color.argb(240, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
+            this.color = color
         }
-        val r = size * 0.55f
-        canvas.drawCircle(cx, cy - r * 0.50f, size * 0.22f, dotPaint)
-        canvas.drawCircle(cx - r * 0.65f, cy, size * 0.20f, dotPaint)
-        canvas.drawCircle(cx + r * 0.65f, cy, size * 0.20f, dotPaint)
-        canvas.drawCircle(cx, cy + r * 0.50f, size * 0.22f, dotPaint)
-        canvas.drawArc(RectF(cx - r, cy - r * 0.85f, cx + r, cy + r * 0.85f), 0f, 360f, false, strokePaint)
-        canvas.drawLine(cx, cy + r * 0.65f, cx, cy + r * 1.30f, strokePaint)
+
+        // Symmetrical, authentic Islamic prayer beads (مسبحة) loop:
+        val loopRadiusX = size * 0.44f
+        val loopRadiusY = size * 0.39f
+        val loopCenterY = cy - size * 0.12f
+
+        // Connecting thread loop
+        val loopRect = RectF(
+            cx - loopRadiusX,
+            loopCenterY - loopRadiusY,
+            cx + loopRadiusX,
+            loopCenterY + loopRadiusY
+        )
+        canvas.drawOval(loopRect, strokePaint)
+
+        // 8 distinct beads around the perimeter
+        val beadCount = 8
+        val beadR = size * 0.11f
+        for (i in 0 until beadCount) {
+            val angleDeg = (i.toFloat() / beadCount) * 360f - 90f
+            val rad = Math.toRadians(angleDeg.toDouble())
+            val bx = cx + (loopRadiusX * Math.cos(rad)).toFloat()
+            val by = loopCenterY + (loopRadiusY * Math.sin(rad)).toFloat()
+            canvas.drawCircle(bx, by, beadR, beadPaint)
+        }
+
+        // Minaret / top separator bead (مئذنة السبحة)
+        val minaretY = loopCenterY + loopRadiusY + (size * 0.08f)
+        val minaretR = size * 0.13f
+        canvas.drawCircle(cx, minaretY, minaretR, beadPaint)
+
+        // Elegant tassel cords (شرابة السبحة)
+        val tasselTopY = minaretY + minaretR * 0.6f
+        val tasselBottomY = tasselTopY + size * 0.38f
+        val tasselSpread = size * 0.18f
+
+        canvas.drawLine(cx, tasselTopY, cx, tasselBottomY, strokePaint)
+        canvas.drawLine(cx, tasselTopY, cx - tasselSpread, tasselBottomY - size * 0.04f, strokePaint)
+        canvas.drawLine(cx, tasselTopY, cx + tasselSpread, tasselBottomY - size * 0.04f, strokePaint)
+
+        val tasselDotR = size * 0.06f
+        canvas.drawCircle(cx, tasselBottomY, tasselDotR, beadPaint)
+        canvas.drawCircle(cx - tasselSpread, tasselBottomY - size * 0.04f, tasselDotR, beadPaint)
+        canvas.drawCircle(cx + tasselSpread, tasselBottomY - size * 0.04f, tasselDotR, beadPaint)
     }
 
     private fun drawRepetitionPill(

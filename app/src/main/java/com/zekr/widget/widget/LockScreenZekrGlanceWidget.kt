@@ -92,6 +92,12 @@ class LockScreenZekrGlanceWidget : GlanceAppWidget() {
                 e.printStackTrace()
             }
         }
+
+        suspend fun updateAllWidgets(
+            context: Context,
+            specificItemId: Int? = null,
+            specificCount: Int? = null
+        ) = updateAll(context, specificItemId, specificCount)
     }
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -158,7 +164,7 @@ class LockScreenZekrGlanceWidget : GlanceAppWidget() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = item.arabicText,
+                            text = item.getFormattedArabicText(),
                             maxLines = 2,
                             style = TextStyle(
                                 color = ColorProvider(android.graphics.Color.WHITE),

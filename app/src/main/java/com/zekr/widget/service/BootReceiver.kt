@@ -23,6 +23,11 @@ class BootReceiver : BroadcastReceiver() {
                     enabled = settings.styleRotationEnabled,
                     hours = settings.styleRotationHours
                 )
+                val notifSettings = prefRepo.getNotificationSettings()
+                com.zekr.widget.notification.NotificationScheduler.sync(
+                    context = appContext,
+                    settings = notifSettings
+                )
             }
         }
     }

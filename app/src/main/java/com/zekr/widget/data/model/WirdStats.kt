@@ -96,6 +96,24 @@ data class WirdStats(
         return updated.copy(bestStreak = maxOf(bestStreak, streakNow))
     }
 
+    fun withUndoneTap(
+        itemType: ContentType,
+        uncompletedItem: Boolean = false,
+        today: LocalDate = LocalDate.now()
+    ): WirdStats {
+        val todayKey = formatDate(today)
+        val existing = records[todayKey] ?: return this
+        val updatedToday = existing.copy(
+            completedCount = (existing.completedCount - if (uncompletedItem) 1 else 0).coerceAtLeast(0),
+            totalTasbihTaps = (existing.totalTasbihTaps - 1).coerceAtLeast(0),
+            quranCompleted = (existing.quranCompleted - if (uncompletedItem && itemType == ContentType.QURAN_AYAH) 1 else 0).coerceAtLeast(0),
+            hadithCompleted = (existing.hadithCompleted - if (uncompletedItem && itemType == ContentType.SAHIH_HADITH) 1 else 0).coerceAtLeast(0),
+            azkarCompleted = (existing.azkarCompleted - if (uncompletedItem && itemType == ContentType.AUTHENTIC_ZEKR) 1 else 0).coerceAtLeast(0)
+        )
+        val updatedRecords = records.toMutableMap().apply { put(todayKey, updatedToday) }
+        return copy(records = updatedRecords)
+    }
+
     companion object {
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 

@@ -134,6 +134,7 @@ fun HomeScreen(
     val currentRepCount by (prefRepo?.currentRepetitionFlow ?: remember { flowOf(0) }).collectAsState(initial = 0)
     val customItems by (prefRepo?.customItemsFlow ?: remember { flowOf(emptyList()) }).collectAsState(initial = emptyList())
     val wirdStats by (prefRepo?.wirdStatsFlow ?: remember { flowOf(WirdStats()) }).collectAsState(initial = WirdStats())
+    val notifSettings by (prefRepo?.notificationSettingsFlow ?: remember { flowOf(com.zekr.widget.data.preferences.NotificationSettings()) }).collectAsState(initial = com.zekr.widget.data.preferences.NotificationSettings())
 
     var localSettings by remember { mutableStateOf<WidgetSettings?>(null) }
     LaunchedEffect(widgetId) {
@@ -235,6 +236,13 @@ fun HomeScreen(
                 enabled = settings.styleRotationEnabled,
                 hours = settings.styleRotationHours
             )
+        }
+    }
+
+    // Schedule / sync periodic smart reminders
+    LaunchedEffect(notifSettings, isPreview) {
+        if (!isPreview) {
+            com.zekr.widget.notification.NotificationScheduler.sync(context, notifSettings)
         }
     }
 
@@ -703,6 +711,25 @@ fun HomeScreen(
                             5 -> SettingsContentTabContent(
                                 settings = settings,
                                 onUpdateSettings = { updateAndSync(it) },
+                                notifSettings = notifSettings,
+                                onUpdateNotifSettings = { newNotif ->
+                                    if (!isPreview) {
+                                        scope.launch {
+                                            prefRepo?.saveNotificationSettings(newNotif)
+                                        }
+                                    }
+                                },
+                                onTestReminder = {
+                                    if (!isPreview) {
+                                        val active = listOfNotNull(
+                                            com.zekr.widget.data.preferences.ReminderType.SALAWAT.takeIf { notifSettings.salawatEnabled },
+                                            com.zekr.widget.data.preferences.ReminderType.TASBEEH.takeIf { notifSettings.tasbeehEnabled },
+                                            com.zekr.widget.data.preferences.ReminderType.WIRD.takeIf { notifSettings.wirdEnabled }
+                                        )
+                                        val target = active.firstOrNull() ?: com.zekr.widget.data.preferences.ReminderType.SALAWAT
+                                        com.zekr.widget.notification.NotificationHelper.showReminder(context, target)
+                                    }
+                                },
                                 currentVersionName = currentVersionName,
                                 updateInfo = updateInfo,
                                 isCheckingUpdate = isCheckingUpdate,
@@ -1621,6 +1648,9 @@ fun UpdateAvailableGlassBanner(
 fun SettingsContentTabContent(
     settings: WidgetSettings,
     onUpdateSettings: (WidgetSettings) -> Unit,
+    notifSettings: com.zekr.widget.data.preferences.NotificationSettings = com.zekr.widget.data.preferences.NotificationSettings(),
+    onUpdateNotifSettings: (com.zekr.widget.data.preferences.NotificationSettings) -> Unit = {},
+    onTestReminder: () -> Unit = {},
     currentVersionName: String = "1.1",
     updateInfo: AppUpdateInfo? = null,
     isCheckingUpdate: Boolean = false,
@@ -1633,6 +1663,171 @@ fun SettingsContentTabContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item {
+            ModernSectionCard(
+                title = "التنبيهات والتذكيرات الذكية",
+                subtitle = "تذكيرات دورية لطيفة مع خيار «تم» لتأكيد الإنجاز و«فتح السبحة»"
+            ) {
+                // 1. Salawat
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "الصلاة على النبي ﷺ",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "«هل صليت على النبي اليوم؟ اللهم صلّ وسلم على نبينا محمد»",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = notifSettings.salawatEnabled,
+                        onCheckedChange = {
+                            onUpdateNotifSettings(notifSettings.copy(salawatEnabled = it))
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 2. Tasbeeh
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "تذكير التسبيح اليومي",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "«هل سبّحت اليوم؟ سبحان الله وبحمده، ألا بذكر الله تطمئن القلوب»",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = notifSettings.tasbeehEnabled,
+                        onCheckedChange = {
+                            onUpdateNotifSettings(notifSettings.copy(tasbeehEnabled = it))
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 3. Wird
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "تذكير الورد القرآني",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "«هل قرأت وردك اليوم؟ رتّل وارتقِ بآيات الذكر الحكيم»",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = notifSettings.wirdEnabled,
+                        onCheckedChange = {
+                            onUpdateNotifSettings(notifSettings.copy(wirdEnabled = it))
+                        }
+                    )
+                }
+
+                val anyNotifActive = notifSettings.salawatEnabled || notifSettings.tasbeehEnabled || notifSettings.wirdEnabled
+                if (anyNotifActive) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "التكرار اليومي للتذكيرات",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "${notifSettings.dailyCount} مرات يومياً",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Slider(
+                        value = notifSettings.dailyCount.toFloat(),
+                        onValueChange = {
+                            onUpdateNotifSettings(notifSettings.copy(dailyCount = it.toInt()))
+                        },
+                        valueRange = 1f..5f,
+                        steps = 3
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "ساعات الهدوء (11 م - 7 ص)",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "إيقاف التنبيهات تلقائياً أثناء ساعات النوم والراحة",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = notifSettings.quietHoursEnabled,
+                            onCheckedChange = {
+                                onUpdateNotifSettings(notifSettings.copy(quietHoursEnabled = it))
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = onTestReminder,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f))
+                    ) {
+                        Text(
+                            text = "🔔 تجربة إشعار تذكيري الآن",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF6EE7B7)
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             ModernSectionCard(
                 title = "المحتوى المعروض",

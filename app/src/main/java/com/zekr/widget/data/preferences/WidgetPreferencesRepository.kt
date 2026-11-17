@@ -63,9 +63,49 @@ object WidgetPreferenceKeys {
     val KEY_TASBEEH_VIBRATION = booleanPreferencesKey("pref_tasbeeh_vibration")
     val KEY_TASBEEH_SOUND = booleanPreferencesKey("pref_tasbeeh_sound")
     val KEY_TASBEEH_DIALOG_SIZE = stringPreferencesKey("pref_tasbeeh_dialog_size")
+    val KEY_TASBEEH_CARD_OPACITY = floatPreferencesKey("pref_tasbeeh_card_opacity")
+    val KEY_TASBEEH_SCRIM_OPACITY = floatPreferencesKey("pref_tasbeeh_scrim_opacity")
+    val KEY_TASBEEH_UNDOABLE_COUNT = intPreferencesKey("pref_tasbeeh_undoable_count")
+    val KEY_TASBEEH_CUSTOM_TARGET = intPreferencesKey("pref_tasbeeh_custom_target")
+
+    // Smart Notifications & Reminders
+    val KEY_NOTIF_SALAWAT_ENABLED = booleanPreferencesKey("pref_notif_salawat_enabled")
+    val KEY_NOTIF_TASBEEH_ENABLED = booleanPreferencesKey("pref_notif_tasbeeh_enabled")
+    val KEY_NOTIF_WIRD_ENABLED = booleanPreferencesKey("pref_notif_wird_enabled")
+    val KEY_NOTIF_COUNT_PER_DAY = intPreferencesKey("pref_notif_count_per_day")
+    val KEY_NOTIF_START_HOUR = intPreferencesKey("pref_notif_start_hour")
+    val KEY_NOTIF_END_HOUR = intPreferencesKey("pref_notif_end_hour")
+    val KEY_NOTIF_QUIET_HOURS_ENABLED = booleanPreferencesKey("pref_notif_quiet_hours_enabled")
+    val KEY_NOTIF_CONFIRMED_SALAWAT_DATE = stringPreferencesKey("pref_notif_confirmed_salawat_date")
+    val KEY_NOTIF_CONFIRMED_TASBEEH_DATE = stringPreferencesKey("pref_notif_confirmed_tasbeeh_date")
+    val KEY_NOTIF_CONFIRMED_WIRD_DATE = stringPreferencesKey("pref_notif_confirmed_wird_date")
 
     fun widgetSettingsKey(widgetId: Int) = stringPreferencesKey("widget_instance_settings_$widgetId")
 }
+
+@Serializable
+enum class ReminderType(val id: String, val titleArabic: String) {
+    SALAWAT("salawat", "الصلاة على النبي ﷺ"),
+    TASBEEH("tasbeeh", "التسبيح"),
+    WIRD("wird", "الورد القرآني")
+}
+
+@Serializable
+data class NotificationSettings(
+    val salawatEnabled: Boolean = true,
+    val tasbeehEnabled: Boolean = true,
+    val wirdEnabled: Boolean = true,
+    val dailyCount: Int = 3,
+    val startHour: Int = 8,
+    val endHour: Int = 22,
+    val quietHoursEnabled: Boolean = true
+)
+
+data class UndoResult(
+    val newCount: Int,
+    val canUndoMore: Boolean,
+    val updatedStats: WirdStats
+)
 
 @Serializable
 enum class TasbeehDialogSize(val id: String, val titleAr: String) {
@@ -208,6 +248,26 @@ class WidgetPreferencesRepository(private val context: Context) {
         TasbeehDialogSize.fromId(prefs[WidgetPreferenceKeys.KEY_TASBEEH_DIALOG_SIZE])
     }
 
+    val tasbeehCardOpacityFlow: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[WidgetPreferenceKeys.KEY_TASBEEH_CARD_OPACITY] ?: 0.94f).coerceIn(0.75f, 1.0f)
+    }
+
+    val tasbeehUndoableCountFlow: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[WidgetPreferenceKeys.KEY_TASBEEH_UNDOABLE_COUNT] ?: 0).coerceAtLeast(0)
+    }
+
+    val notificationSettingsFlow: Flow<NotificationSettings> = context.dataStore.data.map { prefs ->
+        NotificationSettings(
+            salawatEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_SALAWAT_ENABLED] ?: true,
+            tasbeehEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_TASBEEH_ENABLED] ?: true,
+            wirdEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_WIRD_ENABLED] ?: true,
+            dailyCount = (prefs[WidgetPreferenceKeys.KEY_NOTIF_COUNT_PER_DAY] ?: 3).coerceIn(1, 10),
+            startHour = (prefs[WidgetPreferenceKeys.KEY_NOTIF_START_HOUR] ?: 8).coerceIn(0, 23),
+            endHour = (prefs[WidgetPreferenceKeys.KEY_NOTIF_END_HOUR] ?: 22).coerceIn(0, 23),
+            quietHoursEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_QUIET_HOURS_ENABLED] ?: true
+        )
+    }
+
     val tasbeehStateFlow: Flow<TasbeehState> = context.dataStore.data.map { prefs ->
         TasbeehState(
             zekrId = prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_ZEKR_ID] ?: -1,
@@ -225,6 +285,49 @@ class WidgetPreferencesRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs[WidgetPreferenceKeys.KEY_TASBEEH_DIALOG_SIZE] = size.id
         }
+    }
+
+    suspend fun getTasbeehCardOpacity(): Float = tasbeehCardOpacityFlow.first()
+
+    suspend fun setTasbeehCardOpacity(opacity: Float) {
+        val safe = opacity.coerceIn(0.75f, 1.0f)
+        context.dataStore.edit { prefs ->
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_CARD_OPACITY] = safe
+        }
+    }
+
+    suspend fun getNotificationSettings(): NotificationSettings = notificationSettingsFlow.first()
+
+    suspend fun saveNotificationSettings(settings: NotificationSettings) {
+        context.dataStore.edit { prefs ->
+            prefs[WidgetPreferenceKeys.KEY_NOTIF_SALAWAT_ENABLED] = settings.salawatEnabled
+            prefs[WidgetPreferenceKeys.KEY_NOTIF_TASBEEH_ENABLED] = settings.tasbeehEnabled
+            prefs[WidgetPreferenceKeys.KEY_NOTIF_WIRD_ENABLED] = settings.wirdEnabled
+            prefs[WidgetPreferenceKeys.KEY_NOTIF_COUNT_PER_DAY] = settings.dailyCount.coerceIn(1, 10)
+            prefs[WidgetPreferenceKeys.KEY_NOTIF_START_HOUR] = settings.startHour.coerceIn(0, 23)
+            prefs[WidgetPreferenceKeys.KEY_NOTIF_END_HOUR] = settings.endHour.coerceIn(0, 23)
+            prefs[WidgetPreferenceKeys.KEY_NOTIF_QUIET_HOURS_ENABLED] = settings.quietHoursEnabled
+        }
+    }
+
+    suspend fun confirmNotificationAccomplished(type: ReminderType, dateStr: String) {
+        context.dataStore.edit { prefs ->
+            when (type) {
+                ReminderType.SALAWAT -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_SALAWAT_DATE] = dateStr
+                ReminderType.TASBEEH -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_TASBEEH_DATE] = dateStr
+                ReminderType.WIRD -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_WIRD_DATE] = dateStr
+            }
+        }
+    }
+
+    suspend fun isNotificationConfirmedToday(type: ReminderType, dateStr: String): Boolean {
+        val prefs = context.dataStore.data.first()
+        val confirmed = when (type) {
+            ReminderType.SALAWAT -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_SALAWAT_DATE]
+            ReminderType.TASBEEH -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_TASBEEH_DATE]
+            ReminderType.WIRD -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_WIRD_DATE]
+        }
+        return confirmed == dateStr
     }
 
     suspend fun getTasbeehState(): TasbeehState = tasbeehStateFlow.first()
@@ -457,6 +560,10 @@ class WidgetPreferencesRepository(private val context: Context) {
             prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] = count
             prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_TARGET] = target
             prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_FREE_MODE] = isFreeMode
+            if (count == 0) {
+                // If reset to 0, clear undoable taps
+                prefs[WidgetPreferenceKeys.KEY_TASBEEH_UNDOABLE_COUNT] = 0
+            }
             val currentWidgetId = prefs[WidgetPreferenceKeys.KEY_CURRENT_ITEM_ID] ?: -1
             if (currentWidgetId == zekrId) {
                 prefs[WidgetPreferenceKeys.KEY_CURRENT_REP_COUNT] = count
@@ -475,7 +582,7 @@ class WidgetPreferencesRepository(private val context: Context) {
     /**
      * Records one tap in the Tasbeeh counter (either from popup or full screen).
      * Increments daily WirdStats total tasbeeh taps, updates last tasbeeh progress,
-     * and syncs widget repetition if the item is currently displayed on the widget.
+     * tracks undoable taps, and syncs widget repetition if the item is currently displayed.
      */
     suspend fun recordTasbeehTap(
         item: ZekrEntity,
@@ -501,6 +608,9 @@ class WidgetPreferencesRepository(private val context: Context) {
             )
             prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON] = json.encodeToString(updatedStats)
 
+            val currentUndoable = prefs[WidgetPreferenceKeys.KEY_TASBEEH_UNDOABLE_COUNT] ?: 0
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_UNDOABLE_COUNT] = currentUndoable + 1
+
             prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_ZEKR_ID] = item.id
             prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] = newCount
             prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_TARGET] = target
@@ -523,11 +633,67 @@ class WidgetPreferencesRepository(private val context: Context) {
     }
 
     /**
+     * Undoes the last recorded tasbeeh tap:
+     * - Decrements current zekr count and undoable count by 1.
+     * - Decrements today's total tasbeeh taps in WirdStats by 1.
+     * - If the goal was previously marked completed, revokes completion.
+     * - Clamped at 0 (never negative).
+     */
+    suspend fun undoLastTasbeehTap(
+        item: ZekrEntity,
+        target: Int,
+        isFreeMode: Boolean
+    ): UndoResult {
+        var result = UndoResult(newCount = 0, canUndoMore = false, updatedStats = WirdStats())
+        context.dataStore.edit { prefs ->
+            val currentCount = (prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] ?: 0).coerceAtLeast(0)
+            val undoable = (prefs[WidgetPreferenceKeys.KEY_TASBEEH_UNDOABLE_COUNT] ?: 0).coerceAtLeast(0)
+
+            if (currentCount > 0 && undoable > 0) {
+                val newCount = currentCount - 1
+                val newUndoable = undoable - 1
+                val wasCompleted = !isFreeMode && currentCount >= target && target > 0
+
+                val stats = decodeWirdStats(prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON].orEmpty())
+                val updatedStats = stats.withUndoneTap(
+                    itemType = item.type,
+                    uncompletedItem = wasCompleted
+                )
+                prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON] = json.encodeToString(updatedStats)
+
+                prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] = newCount
+                prefs[WidgetPreferenceKeys.KEY_TASBEEH_UNDOABLE_COUNT] = newUndoable
+
+                val currentWidgetId = prefs[WidgetPreferenceKeys.KEY_CURRENT_ITEM_ID] ?: -1
+                if (currentWidgetId == item.id) {
+                    prefs[WidgetPreferenceKeys.KEY_CURRENT_REP_COUNT] = newCount
+                    prefs[WidgetPreferenceKeys.KEY_LAST_REP_TAP_MS] = System.currentTimeMillis()
+                }
+
+                result = UndoResult(
+                    newCount = newCount,
+                    canUndoMore = newUndoable > 0 && newCount > 0,
+                    updatedStats = updatedStats
+                )
+            } else {
+                val stats = decodeWirdStats(prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON].orEmpty())
+                result = UndoResult(
+                    newCount = currentCount,
+                    canUndoMore = false,
+                    updatedStats = stats
+                )
+            }
+        }
+        return result
+    }
+
+    /**
      * Smart Tasbeeh Context Resolver:
      * 1. If displayed content has specific repetition (and not an Ayah), open on it with saved progress.
+     *    Default target is the documented authentic count (e.g. 3, 7, 10, 33, 100), not generic 33.
      * 2. If displayed content is an Ayah or text not intended for tasbeeh (repetition <= 1),
      *    open on the last zekr the user was making tasbeeh with.
-     * 3. If no previous zekr, open on default: "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ".
+     * 3. If no previous zekr, open on default: "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ" (100).
      */
     suspend fun resolveSmartTasbeehItem(
         context: Context,
@@ -543,10 +709,11 @@ class WidgetPreferencesRepository(private val context: Context) {
 
         val isCandidateTasbeeh = candidate != null &&
             candidate.type != com.zekr.widget.data.model.ContentType.QURAN_AYAH &&
-            (candidate.repetition > 1 || candidate.category == "التسبيح")
+            (candidate.repetition > 1 || candidate.category == "التسبيح" || candidate.tasbeehText != null)
 
         if (isCandidateTasbeeh && candidate != null) {
-            val target = candidate.repetition.coerceAtLeast(33)
+            val docCount = candidate.getEffectiveDocumentedCount()
+            val target = docCount ?: 33
             val savedCount = if (state.zekrId == candidate.id) {
                 state.count
             } else {
@@ -560,7 +727,7 @@ class WidgetPreferencesRepository(private val context: Context) {
         if (state.zekrId > 0) {
             val lastItem = allItems.find { it.id == state.zekrId }
             if (lastItem != null) {
-                val target = if (state.target > 0) state.target else lastItem.repetition.coerceAtLeast(33)
+                val target = if (state.target > 0) state.target else (lastItem.getEffectiveDocumentedCount() ?: 33)
                 return Triple(lastItem, state.count, target)
             }
         }
@@ -571,7 +738,7 @@ class WidgetPreferencesRepository(private val context: Context) {
                 it.type != com.zekr.widget.data.model.ContentType.QURAN_AYAH
         } ?: allItems.find { it.repetition > 1 } ?: allItems.first()
 
-        val defaultTarget = defaultItem.repetition.coerceAtLeast(100)
+        val defaultTarget = defaultItem.getEffectiveDocumentedCount() ?: 100
         return Triple(defaultItem, 0, defaultTarget)
     }
 

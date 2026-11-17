@@ -267,12 +267,15 @@ object ZekrRepository {
     private val fallbackItems = listOf(
         ZekrEntity(
             id = 1,
-            arabicText = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ ، سُبْحَانَ اللَّهِ الْعَظِيمِ",
+            arabicText = "كَلِمَتَانِ خَفِيفَتَانِ عَلَى اللِّسَانِ، ثَقِيلَتَانِ فِي الْمِيزَانِ، حَبِيبَتَانِ إِلَى الرَّحْمَنِ: سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ",
             type = ContentType.SAHIH_HADITH,
             source = "صحيح البخاري: 6406",
-            reference = "كلمتان خفيفتان على اللسان ثقيلتان في الميزان",
+            reference = "باب فضل التسبيح",
             category = "التسبيح",
-            englishMeaning = "Glory be to Allah and His praise, Glory be to Allah the Great"
+            englishMeaning = "Glory be to Allah and His praise, Glory be to Allah the Great",
+            tasbeehText = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ",
+            virtueText = "كَلِمَتَانِ خَفِيفَتَانِ عَلَى اللِّسَانِ، ثَقِيلَتَانِ فِي الْمِيزَانِ، حَبِيبَتَانِ إِلَى الرَّحْمَنِ",
+            documentedCount = null
         ),
         ZekrEntity(
             id = 2,
@@ -281,7 +284,8 @@ object ZekrRepository {
             source = "سورة البقرة: 255",
             reference = "آية الكرسي",
             category = "آيات الحفظ",
-            englishMeaning = "Allah - there is no deity except Him, the Ever-Living, the Sustainer of all existence."
+            englishMeaning = "Allah - there is no deity except Him, the Ever-Living, the Sustainer of all existence.",
+            documentedCount = 1
         )
     )
 }
