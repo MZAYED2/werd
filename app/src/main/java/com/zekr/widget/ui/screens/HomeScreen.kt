@@ -1,5 +1,6 @@
 package com.zekr.widget.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.core.net.toUri
@@ -119,6 +120,7 @@ private val TABS = listOf(
 @Composable
 fun HomeScreen(
     isWidgetConfigMode: Boolean = false,
+    widgetId: Int = -1,
     onSaveAndClose: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -134,6 +136,11 @@ fun HomeScreen(
     val wirdStats by (prefRepo?.wirdStatsFlow ?: remember { flowOf(WirdStats()) }).collectAsState(initial = WirdStats())
 
     var localSettings by remember { mutableStateOf<WidgetSettings?>(null) }
+    LaunchedEffect(widgetId) {
+        if (widgetId > 0 && !isPreview && prefRepo != null) {
+            localSettings = prefRepo.getSettingsForWidget(widgetId)
+        }
+    }
     val settings = localSettings ?: initialSettings
 
     var previewItemId by rememberSaveable { mutableIntStateOf(1) }
@@ -241,8 +248,13 @@ fun HomeScreen(
             if (!immediate) {
                 delay(220)
             }
-            prefRepo?.updateSettings(newSettings)
-            ZekrGlanceWidget.updateAllWidgets(context, newSettings)
+            if (widgetId > 0) {
+                prefRepo?.saveSettingsForWidget(widgetId, newSettings)
+                ZekrGlanceWidget.updateWidgetInstance(context, widgetId, newSettings)
+            } else {
+                prefRepo?.updateSettings(newSettings)
+                ZekrGlanceWidget.updateAllWidgets(context, newSettings)
+            }
         }
     }
 
@@ -255,20 +267,39 @@ fun HomeScreen(
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(
-                                text = if (isWidgetConfigMode) "تعديل الويدجت" else "ورد",
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 22.sp,
-                                letterSpacing = 1.sp,
-                                color = Color(0xFFF2F4F7)
-                            )
-                            if (!isWidgetConfigMode) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 Text(
-                                    text = "استوديو الويدجت الإسلامي",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFFB4BAC6)
+                                    text = "ورد",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 22.sp,
+                                    letterSpacing = 1.sp,
+                                    color = Color(0xFFF2F4F7)
                                 )
+                                if (isWidgetConfigMode) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF10B981).copy(alpha = 0.18f))
+                                            .border(1.dp, Color(0xFF10B981).copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (widgetId > 0) "إعدادات الويدجت #$widgetId" else "إعدادات الويدجت",
+                                            color = Color(0xFF6EE7B7),
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
+                            Text(
+                                text = "استوديو الويدجت الإسلامي",
+                                fontSize = 11.sp,
+                                color = Color(0xFFB4BAC6)
+                            )
                         }
                     },
                     actions = {
@@ -278,17 +309,27 @@ fun HomeScreen(
                                     syncJob?.cancel()
                                     if (!isPreview) {
                                         scope.launch {
-                                            prefRepo?.updateSettings(settings)
-                                            ZekrGlanceWidget.updateAllWidgets(context, settings)
+                                            if (widgetId > 0) {
+                                                prefRepo?.saveSettingsForWidget(widgetId, settings)
+                                                ZekrGlanceWidget.updateWidgetInstance(context, widgetId, settings)
+                                            } else {
+                                                prefRepo?.updateSettings(settings)
+                                                ZekrGlanceWidget.updateAllWidgets(context, settings)
+                                            }
                                             onSaveAndClose()
                                         }
                                     } else {
                                         onSaveAndClose()
                                     }
                                 },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF10B981),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.padding(end = 8.dp)
                             ) {
-                                Text("تم وحفظ", fontWeight = FontWeight.Bold)
+                                Text("تم وحفظ ✓", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
                             }
                         } else {
                             val todayCompleted = wirdStats.todayRecord().completedCount
@@ -339,61 +380,59 @@ fun HomeScreen(
                 )
             },
             bottomBar = {
-                if (!isWidgetConfigMode) {
-                    NavigationBar(
-                        containerColor = Color(0xFF14181F),
-                        contentColor = Color(0xFFF2F4F7),
-                        tonalElevation = 8.dp
-                    ) {
-                        NavigationBarItem(
-                            selected = selectedBottomNav == 0,
-                            onClick = { selectedBottomNav = 0 },
-                            icon = {
-                                Text(
-                                    text = "📱",
-                                    fontSize = 18.sp
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = "الويدجت",
-                                    fontWeight = if (selectedBottomNav == 0) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 12.sp
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color(0xFF10B981),
-                                selectedTextColor = Color(0xFF10B981),
-                                unselectedIconColor = Color(0xFF8B95A5),
-                                unselectedTextColor = Color(0xFF8B95A5),
-                                indicatorColor = Color(0xFF10B981).copy(alpha = 0.20f)
+                NavigationBar(
+                    containerColor = Color(0xFF14181F),
+                    contentColor = Color(0xFFF2F4F7),
+                    tonalElevation = 8.dp
+                ) {
+                    NavigationBarItem(
+                        selected = selectedBottomNav == 0,
+                        onClick = { selectedBottomNav = 0 },
+                        icon = {
+                            Text(
+                                text = "📱",
+                                fontSize = 18.sp
                             )
-                        )
-                        NavigationBarItem(
-                            selected = selectedBottomNav == 1,
-                            onClick = { selectedBottomNav = 1 },
-                            icon = {
-                                Text(
-                                    text = "📿",
-                                    fontSize = 18.sp
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = "السبحة",
-                                    fontWeight = if (selectedBottomNav == 1) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 12.sp
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color(0xFF10B981),
-                                selectedTextColor = Color(0xFF10B981),
-                                unselectedIconColor = Color(0xFF8B95A5),
-                                unselectedTextColor = Color(0xFF8B95A5),
-                                indicatorColor = Color(0xFF10B981).copy(alpha = 0.20f)
+                        },
+                        label = {
+                            Text(
+                                text = "الويدجت",
+                                fontWeight = if (selectedBottomNav == 0) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 12.sp
                             )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color(0xFF10B981),
+                            selectedTextColor = Color(0xFF10B981),
+                            unselectedIconColor = Color(0xFF8B95A5),
+                            unselectedTextColor = Color(0xFF8B95A5),
+                            indicatorColor = Color(0xFF10B981).copy(alpha = 0.20f)
                         )
-                    }
+                    )
+                    NavigationBarItem(
+                        selected = selectedBottomNav == 1,
+                        onClick = { selectedBottomNav = 1 },
+                        icon = {
+                            Text(
+                                text = "📿",
+                                fontSize = 18.sp
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = "السبحة",
+                                fontWeight = if (selectedBottomNav == 1) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 12.sp
+                            )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color(0xFF10B981),
+                            selectedTextColor = Color(0xFF10B981),
+                            unselectedIconColor = Color(0xFF8B95A5),
+                            unselectedTextColor = Color(0xFF8B95A5),
+                            indicatorColor = Color(0xFF10B981).copy(alpha = 0.20f)
+                        )
+                    )
                 }
             }
         ) { innerPadding ->
@@ -1926,6 +1965,111 @@ fun SettingsContentTabContent(
                         )
                     }
                 }
+            }
+        }
+
+        item {
+            var showImportDialog by remember { mutableStateOf(false) }
+            var importJsonText by remember { mutableStateOf("") }
+            var importStatus by remember { mutableStateOf<String?>(null) }
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            val prefRepo = remember { WidgetPreferencesRepository(context.applicationContext) }
+
+            ModernSectionCard(
+                title = "النسخ الاحتياطي واستعادة البيانات",
+                subtitle = "حفظ إعداداتك ومفضلاتك وسجل التسبيحات ونقلها لأي جهاز آخر"
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                val jsonStr = prefRepo.exportUserDataJson()
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("Werd Settings Backup", jsonStr)
+                                clipboard?.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(context, "تم نسخ بيانات الإعدادات للحافظة بنجاح ✓", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f))
+                    ) {
+                        Text("📤 نسخ احتياطي", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF6EE7B7))
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            showImportDialog = true
+                            importStatus = null
+                            importJsonText = ""
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.20f))
+                    ) {
+                        Text("📥 استعادة نسخة", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color.White)
+                    }
+                }
+
+                if (showImportDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showImportDialog = false },
+                        title = { Text("استعادة النسخة الاحتياطية", fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column {
+                                Text("الصق كود النسخة الاحتياطية (JSON) المستخرج سابقاً:", fontSize = 13.sp, color = Color.White.copy(alpha = 0.8f))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = importJsonText,
+                                    onValueChange = { importJsonText = it },
+                                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                                    placeholder = { Text("الصق النص هنا...") },
+                                    maxLines = 6
+                                )
+                                if (importStatus != null) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(importStatus!!, color = Color(0xFFF87171), fontSize = 12.sp)
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        val res = prefRepo.importUserDataJson(importJsonText)
+                                        if (res.isSuccess) {
+                                            android.widget.Toast.makeText(context, "تمت استعادة الإعدادات بنجاح ✓", android.widget.Toast.LENGTH_LONG).show()
+                                            showImportDialog = false
+                                        } else {
+                                            importStatus = "تعذّر قراءة كود النسخة الاحتياطية، تأكد من صحة النص"
+                                        }
+                                    }
+                                }
+                            ) { Text("استعادة الآن") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showImportDialog = false }) { Text("إلغاء") }
+                        }
+                    )
+                }
+            }
+        }
+
+        item {
+            ModernSectionCard(
+                title = "ويدجيت شاشة القفل والسبحة السريعة",
+                subtitle = "مدعومة رسمياً على Samsung One UI 6.1 و One UI 7 (Galaxy S24 / S25 Ultra) وأندرويد المدعوم"
+            ) {
+                Text(
+                    text = "• تتيح لك شاشة القفل قراءة الذكر والتسبيح بنقرة واحدة سريعة مع اهتزاز تفاعلي دون الحاجة لفتح قفل الهاتف نهائياً.\n• لإضافتها على هواتف سامسونج: اضغط مطولاً على شاشة القفل ثم اختر «إضافة ويدجيت» أسفل الساعة واختر «ورد» (Werd).\n• على الأجهزة التي لا تدعم ويدجيت شاشة القفل من النظام، يمكن إضافة الويدجيت المصغر على الشاشة الرئيسية.",
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    color = Color(0xFFD0D5DD)
+                )
             }
         }
     }

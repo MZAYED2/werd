@@ -16,6 +16,7 @@ import com.zekr.widget.data.repository.ZekrRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -61,8 +62,25 @@ object WidgetPreferenceKeys {
     val KEY_LAST_TASBEEH_FREE_MODE = booleanPreferencesKey("pref_last_tasbeeh_free_mode")
     val KEY_TASBEEH_VIBRATION = booleanPreferencesKey("pref_tasbeeh_vibration")
     val KEY_TASBEEH_SOUND = booleanPreferencesKey("pref_tasbeeh_sound")
+    val KEY_TASBEEH_DIALOG_SIZE = stringPreferencesKey("pref_tasbeeh_dialog_size")
+
+    fun widgetSettingsKey(widgetId: Int) = stringPreferencesKey("widget_instance_settings_$widgetId")
 }
 
+@Serializable
+enum class TasbeehDialogSize(val id: String, val titleAr: String) {
+    COMPACT("compact", "مدمج"),
+    MEDIUM("medium", "متوسط"),
+    LARGE("large", "كبير");
+
+    companion object {
+        fun fromId(id: String?): TasbeehDialogSize {
+            return values().find { it.id == id } ?: COMPACT
+        }
+    }
+}
+
+@Serializable
 data class TasbeehState(
     val zekrId: Int = -1,
     val count: Int = 0,
@@ -77,6 +95,19 @@ data class TapProgressResult(
     val reachedTarget: Boolean,
     val isPinned: Boolean,
     val updatedStats: WirdStats
+)
+
+@Serializable
+data class UserDataBackup(
+    val version: Int = 1,
+    val exportedAt: Long = System.currentTimeMillis(),
+    val settings: WidgetSettings = WidgetSettings(),
+    val favoriteIds: List<Int> = emptyList(),
+    val pinnedItemId: Int? = null,
+    val customItems: List<ZekrEntity> = emptyList(),
+    val wirdStats: WirdStats = WirdStats(),
+    val tasbeehDialogSize: String = "compact",
+    val tasbeehState: TasbeehState = TasbeehState()
 )
 
 class WidgetPreferencesRepository(private val context: Context) {
@@ -173,6 +204,10 @@ class WidgetPreferencesRepository(private val context: Context) {
         decodeWirdStats(prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON].orEmpty())
     }
 
+    val tasbeehDialogSizeFlow: Flow<TasbeehDialogSize> = context.dataStore.data.map { prefs ->
+        TasbeehDialogSize.fromId(prefs[WidgetPreferenceKeys.KEY_TASBEEH_DIALOG_SIZE])
+    }
+
     val tasbeehStateFlow: Flow<TasbeehState> = context.dataStore.data.map { prefs ->
         TasbeehState(
             zekrId = prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_ZEKR_ID] ?: -1,
@@ -184,9 +219,49 @@ class WidgetPreferencesRepository(private val context: Context) {
         )
     }
 
+    suspend fun getTasbeehDialogSize(): TasbeehDialogSize = tasbeehDialogSizeFlow.first()
+
+    suspend fun setTasbeehDialogSize(size: TasbeehDialogSize) {
+        context.dataStore.edit { prefs ->
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_DIALOG_SIZE] = size.id
+        }
+    }
+
     suspend fun getTasbeehState(): TasbeehState = tasbeehStateFlow.first()
 
     suspend fun getSettings(): WidgetSettings = settingsFlow.first()
+
+    suspend fun getSettingsForWidget(widgetId: Int): WidgetSettings {
+        if (widgetId <= 0) return getSettings()
+        val prefs = context.dataStore.data.first()
+        val key = WidgetPreferenceKeys.widgetSettingsKey(widgetId)
+        val raw = prefs[key]
+        if (!raw.isNullOrBlank()) {
+            runCatching { json.decodeFromString<WidgetSettings>(raw) }
+                .getOrNull()?.let { return it }
+        }
+        return getSettings()
+    }
+
+    suspend fun saveSettingsForWidget(widgetId: Int, settings: WidgetSettings) {
+        if (widgetId > 0) {
+            context.dataStore.edit { prefs ->
+                val key = WidgetPreferenceKeys.widgetSettingsKey(widgetId)
+                prefs[key] = json.encodeToString(settings)
+            }
+        } else {
+            updateSettings(settings)
+        }
+    }
+
+    suspend fun removeSettingsForWidget(widgetId: Int) {
+        if (widgetId > 0) {
+            context.dataStore.edit { prefs ->
+                val key = WidgetPreferenceKeys.widgetSettingsKey(widgetId)
+                prefs.remove(key)
+            }
+        }
+    }
 
     suspend fun getCurrentItemId(): Int = currentItemIdFlow.first()
 
@@ -504,6 +579,44 @@ class WidgetPreferencesRepository(private val context: Context) {
         val prefs = context.dataStore.data.first()
         val pinnedId = prefs[WidgetPreferenceKeys.KEY_PINNED_ITEM_ID]?.takeIf { it > 0 }
         return pinnedId != null
+    }
+
+    suspend fun exportUserDataJson(): String {
+        val backup = UserDataBackup(
+            version = 1,
+            exportedAt = System.currentTimeMillis(),
+            settings = getSettings(),
+            favoriteIds = getFavoriteIds().toList(),
+            pinnedItemId = getPinnedItemId(),
+            customItems = getCustomItems(),
+            wirdStats = getWirdStats(),
+            tasbeehDialogSize = getTasbeehDialogSize().id,
+            tasbeehState = getTasbeehState()
+        )
+        return json.encodeToString(backup)
+    }
+
+    suspend fun importUserDataJson(rawJson: String): Result<Unit> = runCatching {
+        val backup = json.decodeFromString<UserDataBackup>(rawJson)
+        context.dataStore.edit { prefs ->
+            updateSettings(backup.settings)
+            prefs[WidgetPreferenceKeys.KEY_FAVORITE_IDS] = serializeIdSet(backup.favoriteIds.toSet())
+            if (backup.pinnedItemId != null && backup.pinnedItemId > 0) {
+                prefs[WidgetPreferenceKeys.KEY_PINNED_ITEM_ID] = backup.pinnedItemId
+            } else {
+                prefs.remove(WidgetPreferenceKeys.KEY_PINNED_ITEM_ID)
+            }
+            prefs[WidgetPreferenceKeys.KEY_CUSTOM_ITEMS_JSON] = json.encodeToString(backup.customItems)
+            prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON] = json.encodeToString(backup.wirdStats)
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_DIALOG_SIZE] = backup.tasbeehDialogSize
+
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_ZEKR_ID] = backup.tasbeehState.zekrId
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] = backup.tasbeehState.count
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_TARGET] = backup.tasbeehState.target
+            prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_FREE_MODE] = backup.tasbeehState.isFreeMode
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_VIBRATION] = backup.tasbeehState.vibrationEnabled
+            prefs[WidgetPreferenceKeys.KEY_TASBEEH_SOUND] = backup.tasbeehState.soundEnabled
+        }
     }
 
     private fun decodeCustomItems(raw: String): List<ZekrEntity> {

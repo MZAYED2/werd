@@ -90,7 +90,7 @@ class ZekrGlanceWidget : GlanceAppWidget() {
         ) {
             val appContext = context.applicationContext
             val prefRepo = WidgetPreferencesRepository(appContext)
-            val settings = newSettings ?: prefRepo.getSettings()
+            val globalSettings = newSettings ?: prefRepo.getSettings()
             val targetItemId = specificItemId ?: prefRepo.getCurrentItemId()
             val repCount = prefRepo.getCurrentRepetitionCount()
             val favoriteIds = prefRepo.getFavoriteIds()
@@ -104,6 +104,15 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                 val glanceIds = manager.getGlanceIds(ZekrGlanceWidget::class.java)
 
                 for (glanceId in glanceIds) {
+                    val appWidgetId = runCatching { manager.getAppWidgetId(glanceId) }.getOrDefault(0)
+                    val settings = if (newSettings != null) {
+                        newSettings
+                    } else if (appWidgetId > 0) {
+                        prefRepo.getSettingsForWidget(appWidgetId)
+                    } else {
+                        globalSettings
+                    }
+
                     updateAppWidgetState(appContext, glanceId) { prefs ->
                         prefs[KEY_ZEKR_ID] = targetItemId
                         prefs[KEY_COLOR_PRESET] = settings.colorPreset.id
@@ -127,6 +136,53 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+            }
+        }
+
+        suspend fun updateWidgetInstance(
+            context: Context,
+            appWidgetId: Int,
+            settings: WidgetSettings
+        ) {
+            val appContext = context.applicationContext
+            val prefRepo = WidgetPreferencesRepository(appContext)
+            prefRepo.saveSettingsForWidget(appWidgetId, settings)
+
+            try {
+                val manager = GlanceAppWidgetManager(appContext)
+                val glanceId = manager.getGlanceIdBy(appWidgetId)
+                val targetItemId = prefRepo.getCurrentItemId()
+                val repCount = prefRepo.getCurrentRepetitionCount()
+                val favoriteIds = prefRepo.getFavoriteIds()
+                val pinnedId = prefRepo.getPinnedItemId()
+                val isFavorite = targetItemId in favoriteIds
+                val isPinned = pinnedId != null && pinnedId == targetItemId
+                val version = System.currentTimeMillis()
+
+                updateAppWidgetState(appContext, glanceId) { prefs ->
+                    prefs[KEY_ZEKR_ID] = targetItemId
+                    prefs[KEY_COLOR_PRESET] = settings.colorPreset.id
+                    prefs[KEY_IS_GRADIENT] = settings.isGradient
+                    prefs[KEY_PRIMARY_COLOR] = settings.primaryColor
+                    prefs[KEY_SECONDARY_COLOR] = settings.secondaryColor
+                    prefs[KEY_GRADIENT_DIRECTION] = settings.gradientDirection.id
+                    prefs[KEY_GLASS_OPACITY] = settings.glassOpacity
+                    prefs[KEY_BLUR_GRADE] = settings.blurGrade
+                    prefs[KEY_PATTERN] = settings.pattern.id
+                    prefs[KEY_PATTERN_OPACITY] = settings.patternOpacity
+                    prefs[KEY_PATTERN_SCALE] = settings.patternScale
+                    prefs[KEY_FONT] = settings.font.id
+                    prefs[KEY_FONT_SIZE] = settings.fontSizeSp
+                    prefs[KEY_CURRENT_REP_COUNT] = repCount
+                    prefs[KEY_IS_FAVORITE] = isFavorite
+                    prefs[KEY_IS_PINNED] = isPinned
+                    prefs[KEY_UPDATE_VERSION] = version
+                }
+                ZekrGlanceWidget().update(appContext, glanceId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Fallback to update all
+                updateAllWidgets(appContext, settings)
             }
         }
 
@@ -154,7 +210,9 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                 seenIds = seenIds
             )
             prefRepo.saveShuffleProgress(nextResult.item.id, nextResult.updatedSeenIds)
-            updateAllWidgets(context = appContext, newSettings = settings, specificItemId = nextResult.item.id)
+            updateAllWidgets(context = appContext, specificItemId = nextResult.item.id)
+            // Also notify lock screen widget if present
+            LockScreenZekrGlanceWidget.updateAll(appContext, specificItemId = nextResult.item.id)
         }
 
         suspend fun handleBodyTap(context: Context) {

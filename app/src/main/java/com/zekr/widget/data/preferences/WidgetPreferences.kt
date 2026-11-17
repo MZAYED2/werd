@@ -1,7 +1,9 @@
 package com.zekr.widget.data.preferences
 
 import com.zekr.widget.R
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class WidgetFont(val id: String, val titleArabic: String) {
     AMIRI("AMIRI", "أميري قرآني"),
     UTHMANIC("UTHMANIC", "عثماني حفص"),
@@ -23,6 +25,7 @@ enum class WidgetFont(val id: String, val titleArabic: String) {
     RAKKAS("RAKKAS", "رقاص تزييني")
 }
 
+@Serializable
 enum class GlassColorPreset(
     val id: String,
     val titleArabic: String,
@@ -42,6 +45,7 @@ enum class GlassColorPreset(
     OLIVE_GARDEN("OLIVE_GARDEN", "أخضر زيتوني", 0xFF1D3318, 0xFFFFFFFF, 0xFFC5E1A5)
 }
 
+@Serializable
 enum class GradientDirection(val id: String, val titleArabic: String, val symbol: String) {
     DIAGONAL("DIAGONAL", "مائل (قطري)", "⤡"),
     VERTICAL("VERTICAL", "رأسي (أعلى لأسفل)", "⤓"),
@@ -49,6 +53,7 @@ enum class GradientDirection(val id: String, val titleArabic: String, val symbol
     RADIAL("RADIAL", "شعاعي (مركز للخارج)", "◉")
 }
 
+@Serializable
 enum class GradientPreset(
     val id: String,
     val titleArabic: String,
@@ -68,6 +73,7 @@ enum class GradientPreset(
     OLIVE_BRONZE("OLIVE_BRONZE", "زيتوني عتيق وبرونز", 0xFF22301A, 0xFF0F180B)
 }
 
+@Serializable
 enum class PatternType(
     val id: String,
     val titleArabic: String,
@@ -112,6 +118,7 @@ enum class PatternType(
     MINIMAL_DOTS("MINIMAL_DOTS", "نقاط هادئة")
 }
 
+@Serializable
 data class WidgetSettings(
     val font: WidgetFont = WidgetFont.AMIRI,
     val fontSizeSp: Int = 18,

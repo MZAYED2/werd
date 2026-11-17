@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Check if launched from the Widget's long-press "Edit / Configure" menu
+        // Check if launched from the Widget's long-press "Edit / Configure" menu or addition
         intent?.extras?.let {
             appWidgetId = it.getInt(
                 AppWidgetManager.EXTRA_APPWIDGET_ID,
@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
             ZekrWidgetTheme(darkTheme = true, dynamicColor = false) {
                 HomeScreen(
                     isWidgetConfigMode = isWidgetConfigMode,
+                    widgetId = appWidgetId,
                     onSaveAndClose = {
                         if (isWidgetConfigMode) {
                             val resultValue = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)

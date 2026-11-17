@@ -53,6 +53,7 @@ import com.zekr.widget.data.model.WirdStats
 import com.zekr.widget.data.model.ZekrEntity
 import com.zekr.widget.data.preferences.GradientDirection
 import com.zekr.widget.data.preferences.PatternType
+import com.zekr.widget.data.preferences.TasbeehDialogSize
 import com.zekr.widget.data.preferences.WidgetPreferencesRepository
 import com.zekr.widget.data.preferences.WidgetSettings
 import com.zekr.widget.data.repository.ZekrRepository
@@ -110,6 +111,16 @@ fun TasbeehDialogScreen(
     initialZekrId: Int = -1,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val prefRepo = remember { WidgetPreferencesRepository(context.applicationContext) }
+    val dialogSize by prefRepo.tasbeehDialogSizeFlow.collectAsState(initial = TasbeehDialogSize.COMPACT)
+
+    val cardWidthFraction = when (dialogSize) {
+        TasbeehDialogSize.COMPACT -> 0.84f
+        TasbeehDialogSize.MEDIUM -> 0.88f
+        TasbeehDialogSize.LARGE -> 0.92f
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -123,7 +134,7 @@ fun TasbeehDialogScreen(
         // Scrim layer: click outside dialog card to dismiss; consume clicks inside card
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.88f)
+                .fillMaxWidth(cardWidthFraction)
                 .wrapContentHeight()
                 .clickable(
                     indication = null,
@@ -133,6 +144,7 @@ fun TasbeehDialogScreen(
             TasbeehViewContent(
                 initialZekrId = initialZekrId,
                 isDialog = true,
+                dialogSize = dialogSize,
                 onDismiss = onDismiss
             )
         }
@@ -156,6 +168,7 @@ fun TasbeehScreen(
         TasbeehViewContent(
             initialZekrId = -1,
             isDialog = false,
+            dialogSize = TasbeehDialogSize.LARGE,
             injectedSettings = settings,
             onDismiss = onBackToStudio
         )
@@ -166,6 +179,7 @@ fun TasbeehScreen(
 private fun TasbeehViewContent(
     initialZekrId: Int = -1,
     isDialog: Boolean = true,
+    dialogSize: TasbeehDialogSize = TasbeehDialogSize.COMPACT,
     injectedSettings: WidgetSettings? = null,
     onDismiss: (() -> Unit)? = null
 ) {
@@ -358,14 +372,74 @@ private fun TasbeehViewContent(
     val progress = if (isCustomFreeMode) 0f else (currentCount.toFloat() / effectiveTarget).coerceIn(0f, 1f)
     val isCompleted = !isCustomFreeMode && currentCount >= effectiveTarget
 
+    // Proportional dimensions based on selected TasbeehDialogSize
+    val maxCardHeight = if (isDialog) {
+        when (dialogSize) {
+            TasbeehDialogSize.COMPACT -> 495.dp
+            TasbeehDialogSize.MEDIUM -> 585.dp
+            TasbeehDialogSize.LARGE -> 675.dp
+        }
+    } else {
+        Modifier
+    }
+
+    val circleButtonSize = when (dialogSize) {
+        TasbeehDialogSize.COMPACT -> 122.dp
+        TasbeehDialogSize.MEDIUM -> 146.dp
+        TasbeehDialogSize.LARGE -> 165.dp
+    }
+
+    val counterFontSize = when (dialogSize) {
+        TasbeehDialogSize.COMPACT -> 32.sp
+        TasbeehDialogSize.MEDIUM -> 38.sp
+        TasbeehDialogSize.LARGE -> 44.sp
+    }
+
+    val zekrFontSize = when (dialogSize) {
+        TasbeehDialogSize.COMPACT -> 15.5.sp
+        TasbeehDialogSize.MEDIUM -> 17.sp
+        TasbeehDialogSize.LARGE -> 18.5.sp
+    }
+
+    val zekrLineHeight = when (dialogSize) {
+        TasbeehDialogSize.COMPACT -> 23.sp
+        TasbeehDialogSize.MEDIUM -> 26.sp
+        TasbeehDialogSize.LARGE -> 28.sp
+    }
+
+    val zekrMaxLines = when (dialogSize) {
+        TasbeehDialogSize.COMPACT -> 3
+        TasbeehDialogSize.MEDIUM -> 4
+        TasbeehDialogSize.LARGE -> 5
+    }
+
+    val verticalContentPadding = if (isDialog) {
+        when (dialogSize) {
+            TasbeehDialogSize.COMPACT -> 10.dp
+            TasbeehDialogSize.MEDIUM -> 14.dp
+            TasbeehDialogSize.LARGE -> 18.dp
+        }
+    } else 20.dp
+
+    val sectionSpacing = if (isDialog) {
+        when (dialogSize) {
+            TasbeehDialogSize.COMPACT -> 6.dp
+            TasbeehDialogSize.MEDIUM -> 9.dp
+            TasbeehDialogSize.LARGE -> 12.dp
+        }
+    } else 12.dp
+
     val containerModifier = if (isDialog) {
         Modifier
             .fillMaxWidth()
-            .heightIn(max = 620.dp)
+            .heightIn(max = when (dialogSize) {
+                TasbeehDialogSize.COMPACT -> 505.dp
+                TasbeehDialogSize.MEDIUM -> 590.dp
+                TasbeehDialogSize.LARGE -> 680.dp
+            })
             .wrapContentHeight()
     } else {
-        Modifier
-            .fillMaxSize()
+        Modifier.fillMaxSize()
     }
 
     Card(
@@ -402,11 +476,11 @@ private fun TasbeehViewContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 18.dp, vertical = if (isDialog) 14.dp else 20.dp)
+                    .padding(horizontal = 16.dp, vertical = verticalContentPadding)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Top Bar: Close (if dialog) + Header + Reset
+                // Top Bar: Close (if dialog) + Header + Size Switcher + Reset
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -416,7 +490,7 @@ private fun TasbeehViewContent(
                         IconButton(
                             onClick = { onDismiss() },
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.08f))
                         ) {
@@ -428,109 +502,141 @@ private fun TasbeehViewContent(
                             )
                         }
                     } else {
-                        Spacer(modifier = Modifier.size(34.dp))
+                        Spacer(modifier = Modifier.size(32.dp))
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "📿",
-                            fontSize = 17.sp
-                        )
-                        Text(
-                            text = if (isDialog) "مسبحة الذكر" else "السبحة الإلكترونية",
-                            color = Color.White.copy(alpha = 0.95f),
-                            fontFamily = zekrFont,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    // Dialog Size Switcher (Compact / Medium / Large)
+                    if (isDialog) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.05f))
+                                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                                .padding(2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            TasbeehDialogSize.values().forEach { s ->
+                                val isSelected = dialogSize == s
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSelected) accentColor.copy(alpha = 0.22f) else Color.Transparent)
+                                        .clickable {
+                                            scope.launch {
+                                                prefRepo.setTasbeehDialogSize(s)
+                                            }
+                                        }
+                                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = s.titleAr,
+                                        color = if (isSelected) accentColor else Color.White.copy(alpha = 0.55f),
+                                        fontSize = 10.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(text = "📿", fontSize = 17.sp)
+                            Text(
+                                text = "السبحة الإلكترونية",
+                                color = Color.White.copy(alpha = 0.95f),
+                                fontFamily = zekrFont,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
 
                     IconButton(
                         onClick = { resetCounter() },
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(32.dp)
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.08f))
                     ) {
                         Text(
                             text = "↺",
                             color = accentColor,
-                            fontSize = 17.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(sectionSpacing))
 
                 // Total Tasbeehs Today Badge
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(Color.White.copy(alpha = 0.05f))
-                        .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                        .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    Text(
-                        text = "✨",
-                        fontSize = 12.sp
-                    )
+                    Text(text = "✨", fontSize = 11.5.sp)
                     Text(
                         text = "إجمالي تسبيحات اليوم: ${ZekrRepository.toArabicDigits(totalTasbeehsToday)}",
                         color = accentColor.copy(alpha = 0.90f),
                         fontFamily = zekrFont,
-                        fontSize = 11.5.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(sectionSpacing))
 
                 // Zekr Arabic Text & Citation Card
                 if (item != null) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
                                 text = item.arabicText,
                                 color = Color.White.copy(alpha = 0.96f),
                                 fontFamily = zekrFont,
-                                fontSize = 18.sp,
-                                lineHeight = 28.sp,
+                                fontSize = zekrFontSize,
+                                lineHeight = zekrLineHeight,
                                 textAlign = TextAlign.Center,
                                 fontWeight = FontWeight.Medium,
-                                maxLines = 5,
+                                maxLines = zekrMaxLines,
                                 overflow = TextOverflow.Ellipsis
                             )
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
 
+                            // Highly legible citation text
                             Text(
                                 text = item.getConciseCitation(),
-                                color = Color.White.copy(alpha = 0.55f),
+                                color = Color.White.copy(alpha = 0.82f),
                                 fontFamily = zekrFont,
-                                fontSize = 11.5.sp,
-                                textAlign = TextAlign.Center
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(sectionSpacing))
 
                 // Target Selector Pills
                 Row(
@@ -550,8 +656,8 @@ private fun TasbeehViewContent(
                         val isSelected = if (count == -1) isCustomFreeMode else (!isCustomFreeMode && selectedTarget == count)
                         Box(
                             modifier = Modifier
-                                .padding(horizontal = 3.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                                .padding(horizontal = 2.5.dp)
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(
                                     if (isSelected) accentColor.copy(alpha = 0.16f)
                                     else Color.White.copy(alpha = 0.04f)
@@ -560,7 +666,7 @@ private fun TasbeehViewContent(
                                     1.dp,
                                     if (isSelected) accentColor.copy(alpha = 0.45f)
                                     else Color.White.copy(alpha = 0.08f),
-                                    RoundedCornerShape(10.dp)
+                                    RoundedCornerShape(8.dp)
                                 )
                                 .clickable {
                                     if (count == -1) {
@@ -581,25 +687,25 @@ private fun TasbeehViewContent(
                                         }
                                     }
                                 }
-                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                                .padding(horizontal = 8.dp, vertical = 3.5.dp)
                         ) {
                             Text(
                                 text = label,
                                 color = if (isSelected) accentColor else Color.White.copy(alpha = 0.65f),
                                 fontFamily = zekrFont,
-                                fontSize = 11.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(sectionSpacing))
 
                 // Elegant Minimalist Tasbeeh Button matching widget colors
                 Box(
                     modifier = Modifier
-                        .size(155.dp)
+                        .size(circleButtonSize)
                         .graphicsLayer(scaleX = buttonScale, scaleY = buttonScale)
                         .clip(CircleShape)
                         .background(buttonBgBrush)
@@ -612,8 +718,8 @@ private fun TasbeehViewContent(
                 ) {
                     // Thin Refined Circular Progress Arc
                     if (!isCustomFreeMode && progress > 0f) {
-                        Canvas(modifier = Modifier.fillMaxSize().padding(6.dp)) {
-                            val strokeW = 3.5.dp.toPx()
+                        Canvas(modifier = Modifier.fillMaxSize().padding(5.dp)) {
+                            val strokeW = 3.2.dp.toPx()
                             drawArc(
                                 color = accentColor.copy(alpha = 0.85f),
                                 startAngle = -90f,
@@ -633,7 +739,7 @@ private fun TasbeehViewContent(
                             text = ZekrRepository.toArabicDigits(currentCount),
                             color = Color.White,
                             fontFamily = zekrFont,
-                            fontSize = 40.sp,
+                            fontSize = counterFontSize,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
                         )
@@ -645,7 +751,7 @@ private fun TasbeehViewContent(
                             else "من أصل ${ZekrRepository.toArabicDigits(selectedTarget)}",
                             color = accentColor.copy(alpha = 0.85f),
                             fontFamily = zekrFont,
-                            fontSize = 11.5.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -660,15 +766,15 @@ private fun TasbeehViewContent(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 10.dp),
-                        shape = RoundedCornerShape(14.dp),
+                            .padding(top = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f)),
                         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.40f))
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -676,14 +782,14 @@ private fun TasbeehViewContent(
                                 text = "✨ تم بحمد الله إتمام الذكر!",
                                 color = accentColor,
                                 fontFamily = zekrFont,
-                                fontSize = 13.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(sectionSpacing))
 
                 // Bottom Utility Row: Sound/Vibration toggles & Next zekr
                 Row(
@@ -695,7 +801,7 @@ private fun TasbeehViewContent(
                         // Vibration Toggle
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(
                                     if (vibrationEnabled) accentColor.copy(alpha = 0.16f)
                                     else Color.White.copy(alpha = 0.04f)
@@ -704,29 +810,29 @@ private fun TasbeehViewContent(
                                     1.dp,
                                     if (vibrationEnabled) accentColor.copy(alpha = 0.45f)
                                     else Color.White.copy(alpha = 0.08f),
-                                    RoundedCornerShape(10.dp)
+                                    RoundedCornerShape(8.dp)
                                 )
                                 .clickable {
-                                    val nextVibe = !vibrationEnabled
-                                    vibrationEnabled = nextVibe
+                                    vibrationEnabled = !vibrationEnabled
                                     scope.launch {
-                                        prefRepo.setTasbeehPreferences(nextVibe, soundEnabled)
+                                        prefRepo.setTasbeehPreferences(vibrationEnabled, soundEnabled)
                                     }
                                 }
-                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = if (vibrationEnabled) "📳 اهتزاز" else "📳 معطل",
-                                color = if (vibrationEnabled) accentColor else Color.White.copy(alpha = 0.55f),
+                                text = if (vibrationEnabled) "📳 اهتزاز" else "📴 صامت",
+                                color = if (vibrationEnabled) accentColor else Color.White.copy(alpha = 0.45f),
                                 fontFamily = zekrFont,
-                                fontSize = 11.sp
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
 
                         // Sound Toggle
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(
                                     if (soundEnabled) accentColor.copy(alpha = 0.16f)
                                     else Color.White.copy(alpha = 0.04f)
@@ -735,22 +841,22 @@ private fun TasbeehViewContent(
                                     1.dp,
                                     if (soundEnabled) accentColor.copy(alpha = 0.45f)
                                     else Color.White.copy(alpha = 0.08f),
-                                    RoundedCornerShape(10.dp)
+                                    RoundedCornerShape(8.dp)
                                 )
                                 .clickable {
-                                    val nextSound = !soundEnabled
-                                    soundEnabled = nextSound
+                                    soundEnabled = !soundEnabled
                                     scope.launch {
-                                        prefRepo.setTasbeehPreferences(vibrationEnabled, nextSound)
+                                        prefRepo.setTasbeehPreferences(vibrationEnabled, soundEnabled)
                                     }
                                 }
-                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = if (soundEnabled) "🔊 صوت" else "🔇 صامت",
-                                color = if (soundEnabled) accentColor else Color.White.copy(alpha = 0.55f),
+                                text = if (soundEnabled) "🔊 صوت" else "🔈 كتم",
+                                color = if (soundEnabled) accentColor else Color.White.copy(alpha = 0.45f),
                                 fontFamily = zekrFont,
-                                fontSize = 11.sp
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
@@ -758,18 +864,18 @@ private fun TasbeehViewContent(
                     // Next Zekr Button
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(Color.White.copy(alpha = 0.06f))
-                            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
                             .clickable { shuffleNextZekr() }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = "ذكر آخر ‹",
-                            color = Color.White.copy(alpha = 0.90f),
+                            color = Color.White.copy(alpha = 0.85f),
                             fontFamily = zekrFont,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }

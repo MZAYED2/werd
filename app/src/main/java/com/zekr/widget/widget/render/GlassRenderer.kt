@@ -642,13 +642,14 @@ object GlassRenderer {
                 )
             }
 
-            // Citation Text left of the 3 buttons
+            // Citation Text left of the 3 buttons - enhanced contrast and legibility
             if (layout.maxCitationWidthPx >= 48f) {
                 val footerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.argb(205, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
-                    textSize = (16.5f * layout.scaleFactor).coerceIn(11.5f, 21f)
+                    color = Color.argb(240, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
+                    textSize = (17.5f * layout.scaleFactor).coerceIn(12f, 22f)
                     typeface = customTypeface
                     textAlign = Paint.Align.CENTER
+                    setShadowLayer(3.5f * layout.scaleFactor, 0f, 1f * layout.scaleFactor, Color.argb(160, 0, 0, 0))
                 }
                 var citationText = item.getConciseCitation()
                 if (footerPaint.measureText(citationText) > layout.maxCitationWidthPx) {
@@ -659,12 +660,13 @@ object GlassRenderer {
                 canvas.drawText(citationText, layout.citationCxPx, footerY, footerPaint)
             }
         } else {
-            // Compact Mode: Citation only, full width
+            // Compact Mode: Citation only, full width - enhanced contrast and legibility
             val footerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(205, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
-                textSize = (17f * layout.scaleFactor).coerceIn(12f, 22f)
+                color = Color.argb(240, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
+                textSize = (18f * layout.scaleFactor).coerceIn(12.5f, 23f)
                 typeface = customTypeface
                 textAlign = Paint.Align.CENTER
+                setShadowLayer(3.5f * layout.scaleFactor, 0f, 1f * layout.scaleFactor, Color.argb(160, 0, 0, 0))
             }
 
             val maxFooterWidth = (safeW - 48f).coerceAtLeast(32f)
