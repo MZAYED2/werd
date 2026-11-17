@@ -298,27 +298,6 @@ fun HomeScreen(
                                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                                 modifier = Modifier.padding(end = 10.dp)
                             ) {
-                                // Tasbeeh Button in Top Bar
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(Color(0xFF10B981).copy(alpha = 0.20f))
-                                        .border(
-                                            1.dp,
-                                            Color(0xFF10B981).copy(alpha = 0.50f),
-                                            RoundedCornerShape(14.dp)
-                                        )
-                                        .clickable {
-                                            selectedBottomNav = 1
-                                        }
-                                        .padding(horizontal = 9.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text("📿", fontSize = 11.5.sp)
-                                    Text("المسبحة", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6EE7B7))
-                                }
-
                                 // Daily Wird Progress Pill
                                 Row(
                                     modifier = Modifier
@@ -523,54 +502,29 @@ fun HomeScreen(
                         onSkip = { shufflePreviewAndWidgets(clearPin = true) }
                     )
 
-                    // Quick Action Row below Preview: [Open Masbaha] & [Pin Widget to Home Screen]
-                    Row(
+                    // Pin Widget to Home Screen Button below Preview
+                    Button(
+                        onClick = {
+                            val manager = context.getSystemService(android.appwidget.AppWidgetManager::class.java)
+                            val provider = android.content.ComponentName(context, com.zekr.widget.widget.ZekrWidgetReceiver::class.java)
+                            if (manager?.isRequestPinAppWidgetSupported == true) {
+                                manager.requestPinAppWidget(provider, null, null)
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(top = 8.dp)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141F30)),
+                        border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.55f))
                     ) {
-                        Button(
-                            onClick = {
-                                selectedBottomNav = 1
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF132219)),
-                            border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.55f))
-                        ) {
-                            Text(
-                                text = "📿 فتح مسبحة الذكر",
-                                color = Color(0xFF6EE7B7),
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Button(
-                            onClick = {
-                                val manager = context.getSystemService(android.appwidget.AppWidgetManager::class.java)
-                                val provider = android.content.ComponentName(context, com.zekr.widget.widget.ZekrWidgetReceiver::class.java)
-                                if (manager?.isRequestPinAppWidgetSupported == true) {
-                                    manager.requestPinAppWidget(provider, null, null)
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141F30)),
-                            border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.55f))
-                        ) {
-                            Text(
-                                text = "➕ إضافة الويدجيت",
-                                color = Color(0xFF93C5FD),
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Text(
+                            text = "➕ إضافة الويدجيت للشاشة الرئيسية",
+                            color = Color(0xFF93C5FD),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -2271,21 +2225,21 @@ fun LiveGlassWidgetPreview(
                     }
                 }
 
-                // Interactive Bottom Action Bar: [Favorite, Share] --- Citation --- [Skip]
+                // Interactive Bottom Action Bar: [Favorite, Share, Tasbeeh] --- Citation
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(30.dp),
+                        .height(34.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(
                                     if (isFavorite) Color(0xFFFF5C7A).copy(alpha = 0.26f)
@@ -2304,13 +2258,13 @@ fun LiveGlassWidgetPreview(
                                 imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                                 contentDescription = "المفضلة",
                                 tint = if (isFavorite) Color(0xFFFF6B86) else animatedTextColor.copy(alpha = 0.9f),
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                         }
 
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(animatedTextColor.copy(alpha = 0.14f))
                                 .border(1.dp, animatedTextColor.copy(alpha = 0.22f), CircleShape)
@@ -2321,13 +2275,13 @@ fun LiveGlassWidgetPreview(
                                 imageVector = Icons.Filled.Share,
                                 contentDescription = "مشاركة",
                                 tint = animatedTextColor.copy(alpha = 0.9f),
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                         }
 
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(targetAccentColor.copy(alpha = 0.20f))
                                 .border(1.dp, targetAccentColor.copy(alpha = 0.50f), CircleShape)
@@ -2336,7 +2290,7 @@ fun LiveGlassWidgetPreview(
                         ) {
                             Text(
                                 text = "📿",
-                                fontSize = 12.sp
+                                fontSize = 13.sp
                             )
                         }
                     }
@@ -2345,7 +2299,7 @@ fun LiveGlassWidgetPreview(
                         text = currentItem.getConciseCitation(),
                         color = animatedTextColor.copy(alpha = 0.88f),
                         fontFamily = FontHelper.getComposeFontFamily(settings.font),
-                        fontSize = 10.5.sp,
+                        fontSize = 11.sp,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -2353,40 +2307,6 @@ fun LiveGlassWidgetPreview(
                             .weight(1f)
                             .padding(horizontal = 8.dp)
                     )
-
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(animatedTextColor.copy(alpha = 0.14f))
-                            .border(1.dp, animatedTextColor.copy(alpha = 0.22f), CircleShape)
-                            .clickable { onSkip() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Canvas(modifier = Modifier.size(12.dp)) {
-                            val w = size.width
-                            val h = size.height
-                            val strokeW = 1.6.dp.toPx()
-                            val iconColor = animatedTextColor.copy(alpha = 0.9f)
-                            val path = Path().apply {
-                                moveTo(w * 0.72f, h * 0.20f)
-                                lineTo(w * 0.35f, h * 0.50f)
-                                lineTo(w * 0.72f, h * 0.80f)
-                            }
-                            drawPath(
-                                path = path,
-                                color = iconColor,
-                                style = Stroke(width = strokeW, cap = StrokeCap.Round)
-                            )
-                            drawLine(
-                                color = iconColor,
-                                start = Offset(w * 0.20f, h * 0.22f),
-                                end = Offset(w * 0.20f, h * 0.78f),
-                                strokeWidth = strokeW,
-                                cap = StrokeCap.Round
-                            )
-                        }
-                    }
                 }
             }
         }

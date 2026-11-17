@@ -33,6 +33,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
@@ -49,6 +50,8 @@ import com.zekr.widget.data.preferences.WidgetPreferencesRepository
 import com.zekr.widget.data.preferences.WidgetSettings
 import com.zekr.widget.data.repository.ZekrRepository
 import com.zekr.widget.widget.render.GlassRenderer
+import com.zekr.widget.widget.render.WidgetLayout
+import com.zekr.widget.widget.render.WidgetLayoutGeometry
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -196,12 +199,22 @@ class ZekrGlanceWidget : GlanceAppWidget() {
             val item: ZekrEntity = ZekrRepository.getById(appContext, currentId, customItems)
 
             val widgetSize = LocalSize.current
+            val density = appContext.resources.displayMetrics.density
+            val widthDp = widgetSize.width.value
+            val heightDp = widgetSize.height.value
             val (bitmapW, bitmapH) = widgetBitmapPx(
-                widthDp = widgetSize.width.value,
-                heightDp = widgetSize.height.value,
-                density = appContext.resources.displayMetrics.density
+                widthDp = widthDp,
+                heightDp = heightDp,
+                density = density
             )
-            val showInteractiveBar = widgetSize.height.value >= 110f
+            val scaleFactor = (bitmapW.toFloat() / (widthDp * density)).coerceIn(0.2f, 5f)
+            val layout = WidgetLayoutGeometry.compute(
+                widthDp = widthDp,
+                heightDp = heightDp,
+                density = density,
+                scaleFactor = scaleFactor,
+                hasMultiRep = item.repetition > 1
+            )
 
             // Bitmap matches the widget aspect, so FillBounds scales both axes together.
             val fullWidgetBitmap = GlassRenderer.createFullWidgetBitmap(
@@ -225,7 +238,10 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                 currentRepetition = currentRepetition,
                 isFavorite = isFavorite,
                 isPinned = isPinned,
-                showInteractiveBar = showInteractiveBar
+                showInteractiveBar = layout.showInteractiveBar,
+                widthDp = widthDp,
+                heightDp = heightDp,
+                density = density
             )
 
             val isRtl = appContext.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
@@ -248,7 +264,7 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                         modifier = GlanceModifier.fillMaxSize()
                     )
 
-                    if (showInteractiveBar) {
+                    if (layout.showInteractiveBar) {
                         Column(modifier = GlanceModifier.fillMaxSize()) {
                             // Main Body Zone: Tap to advance / shuffle to next zekr
                             Box(
@@ -263,21 +279,28 @@ class ZekrGlanceWidget : GlanceAppWidget() {
                                 Row(
                                     modifier = GlanceModifier
                                         .fillMaxWidth()
-                                        .height(34.dp),
+                                        .height(layout.pillHeightDp.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Box(
                                         modifier = GlanceModifier
-                                            .width(160.dp)
+                                            .width(layout.pillWidthDp.dp)
                                             .fillMaxHeight()
                                             .clickable(tasbeehAction)
                                     ) {}
                                 }
+                                Spacer(modifier = GlanceModifier.height(4.dp))
                             }
 
-                            // Bottom Action Bar Zone aligned to physical canvas positions regardless of system LTR/RTL
-                            BottomTouchBar(isRtl = isRtl, tasbeehAction = tasbeehAction)
+                            // Bottom Action Bar Zone with the 3 buttons
+                            BottomTouchBar(
+                                isRtl = isRtl,
+                                layout = layout,
+                                tasbeehAction = tasbeehAction
+                            )
+
+                            Spacer(modifier = GlanceModifier.height(layout.bottomMarginDp.dp))
                         }
                     } else {
                         // Compact Widget Fallback: single tap anywhere advances to next
@@ -294,77 +317,78 @@ class ZekrGlanceWidget : GlanceAppWidget() {
 }
 
 @Composable
-private fun BottomTouchBar(isRtl: Boolean, tasbeehAction: Action) {
+private fun BottomTouchBar(
+    isRtl: Boolean,
+    layout: WidgetLayout,
+    tasbeehAction: Action
+) {
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .height(48.dp),
+            .height(layout.barHeightDp.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isRtl) {
-            // RTL Row flows Right -> Left: [Favorite, Share, Tasbeeh, Center/Body, Skip]
+            // In RTL, child 0 is on the RIGHT side: [Margin, Favorite, Share, Tasbeeh, Body]
+            Spacer(modifier = GlanceModifier.width(layout.rightMarginDp.dp))
+            // 1. Favorite (Rightmost)
             Box(
                 modifier = GlanceModifier
-                    .width(40.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(actionRunCallback<ToggleFavoriteWidgetAction>())
             ) {}
+            // 2. Share (Middle)
             Box(
                 modifier = GlanceModifier
-                    .width(40.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(actionRunCallback<ShareWidgetAction>())
             ) {}
+            // 3. Tasbeeh (Leftmost of the 3 buttons)
             Box(
                 modifier = GlanceModifier
-                    .width(44.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(tasbeehAction)
             ) {}
+            // Space for citation and body touch on the left
             Box(
                 modifier = GlanceModifier
                     .defaultWeight()
                     .fillMaxHeight()
                     .clickable(actionRunCallback<TapZekrBodyAction>())
-            ) {}
-            Box(
-                modifier = GlanceModifier
-                    .width(46.dp)
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<SkipWidgetAction>())
             ) {}
         } else {
-            // LTR Row flows Left -> Right: [Skip, Center/Body, Tasbeeh, Share, Favorite]
-            Box(
-                modifier = GlanceModifier
-                    .width(46.dp)
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<SkipWidgetAction>())
-            ) {}
+            // In LTR, child 0 is on the LEFT side: [Body, Tasbeeh, Share, Favorite, Margin]
             Box(
                 modifier = GlanceModifier
                     .defaultWeight()
                     .fillMaxHeight()
                     .clickable(actionRunCallback<TapZekrBodyAction>())
             ) {}
+            // 3. Tasbeeh (Leftmost of the 3 buttons)
             Box(
                 modifier = GlanceModifier
-                    .width(44.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(tasbeehAction)
             ) {}
+            // 2. Share (Middle)
             Box(
                 modifier = GlanceModifier
-                    .width(40.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(actionRunCallback<ShareWidgetAction>())
             ) {}
+            // 1. Favorite (Rightmost)
             Box(
                 modifier = GlanceModifier
-                    .width(40.dp)
+                    .width(layout.buttonTouchSizeDp.dp)
                     .fillMaxHeight()
                     .clickable(actionRunCallback<ToggleFavoriteWidgetAction>())
             ) {}
+            Spacer(modifier = GlanceModifier.width(layout.rightMarginDp.dp))
         }
     }
 }

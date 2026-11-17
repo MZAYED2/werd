@@ -32,6 +32,9 @@
         <activity
             android:name=".ui.tasbeeh.TasbeehDialogActivity"
             android:exported="true"
+            android:taskAffinity=":tasbeeh_dialog"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.ZekrWidget.Dialog" />
 
         <!-- Foreground Service for Realtime Screen Lock/Unlock Shuffle -->
