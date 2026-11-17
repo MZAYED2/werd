@@ -1,0 +1,35 @@
+*.iml
+.gradle
+.gradle-home/
+.gradle_home/
+.kotlin/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+app/build
+*.jks
+*.keystore
+keystore.properties
+/keystore/
+*.pem
+*.p12
+*.key
+.env
+.env.*
+
+# Local agent/IDE caches & scratch artifacts
+.trail/
+.agents/
+.claude/
+.gemini/
+.cursor/
+/scratch/
+/scratch_card_*.png
+/mobile_screen.png
+/test_screen.png
+/Glass Mihrab*.png

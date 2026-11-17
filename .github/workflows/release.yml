@@ -1,0 +1,86 @@
+name: Release Werd APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag (e.g. v1.2)'
+        required: true
+        default: 'v1.2'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build APK & Publish Arabic Release Notes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Decode Keystore (if configured in GitHub Secrets)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            mkdir -p keystore
+            echo "$KEYSTORE_BASE64" | base64 --decode > keystore/release.jks
+            cat <<EOF > keystore.properties
+          storeFile=keystore/release.jks
+          storePassword=$KEYSTORE_STORE_PASSWORD
+          keyAlias=$KEYSTORE_KEY_ALIAS
+          keyPassword=$KEYSTORE_KEY_PASSWORD
+          EOF
+          fi
+
+      - name: Build Release APK (Signed if keystore exists, otherwise Debug fallback)
+        run: |
+          if [ -f "keystore.properties" ]; then
+            ./gradlew assembleRelease --no-daemon
+          else
+            ./gradlew assembleDebug --no-daemon
+          fi
+
+      - name: Prepare APK artifact for release
+        id: prep_apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+          echo "Found APK: $APK_PATH"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Verify RELEASE_NOTES.md exists
+        run: |
+          if [ ! -f "RELEASE_NOTES.md" ]; then
+            echo "## ✨ تحديث جديد لتطبيق ورد" > RELEASE_NOTES.md
+            echo "- تحسينات في الأداء وإصلاحات عامة." >> RELEASE_NOTES.md
+          fi
+
+      - name: Create GitHub Release from RELEASE_NOTES.md
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
+          name: "تطبيق ورد ${{ inputs.tag_name || github.ref_name }}"
+          body_path: RELEASE_NOTES.md
+          files: ${{ steps.prep_apk.outputs.apk_path }}
+          draft: false
+          prerelease: false
