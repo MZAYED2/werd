@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -38,6 +39,7 @@ fun DailyWirdTabContent(
     allItems: List<ZekrEntity> = emptyList(),
     openGuidedQuran: Boolean = false,
     onGuidedQuranOpened: () -> Unit = {},
+    onOpenMushaf: () -> Unit = {},
     onUpdateDailyGoal: (Int) -> Unit
 ) {
     val palette = MaterialTheme.colorScheme
@@ -67,6 +69,45 @@ fun DailyWirdTabContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Hero Mushaf Card
+        item(key = "mushaf-card") {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenMushaf),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = palette.primaryContainer.copy(alpha = 0.35f)),
+                border = BorderStroke(1.dp, palette.primary.copy(alpha = 0.45f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text("📖", fontSize = 32.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "المصحف الشريف (٦٠٤ صفحات)",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = palette.onSurface
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "مصحف المدينة النبوية بالرسم العثماني، متابعة القراءة، وحفظ الصفحة تلقائياً",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.onSurfaceVariant
+                        )
+                    }
+                    Button(
+                        onClick = onOpenMushaf,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("اقرأ وردك")
+                    }
+                }
+            }
+        }
         item(key = "guided-wird") { GuidedWirdCard(allItems, openGuidedQuran, onGuidedQuranOpened) }
         // 1. Hero Daily Consistency Ring Card
         item {

@@ -4,8 +4,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
+import com.zekr.widget.data.model.ContentType
 import com.zekr.widget.data.preferences.ReminderType
 import com.zekr.widget.data.preferences.WidgetPreferencesRepository
+import com.zekr.widget.widget.ZekrGlanceWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,11 +34,25 @@ class NotificationActionReceiver : BroadcastReceiver() {
         }
 
         NotificationScheduler.cancelSnooze(appContext, type)
-        val date = LocalDate.now().toString()
+        val today = LocalDate.now()
+        val dateStr = today.toString()
+        val kindStr = intent.getStringExtra(NotificationHelper.EXTRA_CONTENT_KIND)
+        val contentType = ContentType.entries.firstOrNull { it.name == kindStr } ?: when (type) {
+            ReminderType.VERSE -> ContentType.QURAN_AYAH
+            ReminderType.HADITH -> ContentType.SAHIH_HADITH
+            ReminderType.DUA -> ContentType.AUTHENTIC_ZEKR
+            ReminderType.WIRD -> ContentType.QURAN_AYAH
+            ReminderType.SALAWAT, ReminderType.TASBEEH, ReminderType.DHIKR -> ContentType.AUTHENTIC_ZEKR
+        }
+
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                WidgetPreferencesRepository(appContext).confirmNotificationAccomplished(type, date)
+                val repo = WidgetPreferencesRepository(appContext)
+                val recorded = repo.recordCompletedFromNotification(type, contentType, notificationId, today)
+                if (recorded) {
+                    ZekrGlanceWidget.updateAllWidgets(appContext)
+                }
             } finally {
                 pending.finish()
             }

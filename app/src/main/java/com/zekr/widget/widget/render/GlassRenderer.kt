@@ -592,7 +592,7 @@ object GlassRenderer {
                     alignment = textAlignment
                 )
                 val fits = candidate.height <= availableHeightForZekr &&
-                    (0 until candidate.lineCount).all { candidate.getLineWidth(it) <= maxTextWidth }
+                    (0 until candidate.lineCount).all { candidate.getLineWidth(it) <= maxTextWidth + 1.5f }
                 if (fits) {
                     low = mid
                     bestLayout = candidate
@@ -649,7 +649,7 @@ object GlassRenderer {
 
             if (layout.mode != WidgetDisplayMode.COMPACT) {
                 drawActionButtonPill(canvas, layout.openWerdCxPx, barCenterY, btnRadius, textColor, highlighted = false)
-                drawWerdLogoIcon(canvas, layout.openWerdCxPx, barCenterY, btnRadius * .68f, textColor, context)
+                drawWerdLogoIcon(canvas, layout.openWerdCxPx, barCenterY, btnRadius * 1.30f, textColor, context)
             }
 
             val labelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1033,7 +1033,7 @@ object GlassRenderer {
                 .setAlignment(alignment)
                 .setTextDirection(TextDirectionHeuristics.ANYRTL_LTR)
                 .setLineSpacing(2f * scaleFactor, 1.15f)
-                .setBreakStrategy(Layout.BREAK_STRATEGY_BALANCED)
+                .setBreakStrategy(if (ellipsize != null) Layout.BREAK_STRATEGY_SIMPLE else Layout.BREAK_STRATEGY_BALANCED)
                 .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                 .setIncludePad(true)
 

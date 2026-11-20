@@ -109,7 +109,12 @@ class FloatingTasbeehService : Service() {
 
         val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(
-            NotificationChannel(CHANNEL, "السبحة العائمة", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL, "السبحة العائمة", NotificationManager.IMPORTANCE_MIN).apply {
+                description = "تشغيل السبحة فوق التطبيقات"
+                setSound(null, null)
+                enableVibration(false)
+                setShowBadge(false)
+            }
         )
         val close = PendingIntent.getService(
             this, NOTIFICATION, Intent(this, javaClass).setAction(STOP),
@@ -120,9 +125,11 @@ class FloatingTasbeehService : Service() {
             NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_werd_reminder)
                 .setContentTitle("السبحة العائمة")
-                .setContentText("السبحة الذكية نشطة")
+                .setContentText("انقر للتحكم أو الإغلاق")
+                .setPriority(NotificationCompat.PRIORITY_MIN)
+                .setSilent(true)
                 .setOngoing(true)
-                .addAction(0, "إغلاق", close)
+                .addAction(0, "إغلاق نهائي", close)
                 .build()
         )
 
@@ -187,23 +194,19 @@ class FloatingTasbeehService : Service() {
 
     private fun startEdgeFade() {
         edgeFadeJob?.cancel()
-        setWindowAlpha(0.85f)
+        setEdgeAlpha(0.85f)
         edgeFadeJob = scope.launch {
             delay(15_000L) // 15 seconds -> 45%
             if (!isActive || mode != Mode.Edge) return@launch
-            setWindowAlpha(0.45f)
+            setEdgeAlpha(0.45f)
             delay(15_000L) // 30 seconds total -> 20%
             if (!isActive || mode != Mode.Edge) return@launch
-            setWindowAlpha(0.20f)
+            setEdgeAlpha(0.20f)
         }
     }
 
-    private fun setWindowAlpha(alpha: Float) {
-        if (!::window.isInitialized) return
-        window.alpha = alpha
-        view?.let {
-            if (it.isAttachedToWindow) manager.updateViewLayout(it, window)
-        }
+    private fun setEdgeAlpha(alpha: Float) {
+        view?.alpha = alpha
     }
 
     private fun triggerHaptic() {
@@ -232,12 +235,12 @@ class FloatingTasbeehService : Service() {
 
         val width = when (next) {
             Mode.Expanded -> minOf(dp(324), screenWidth() - dp(16))
-            Mode.Compact -> dp(250)
-            Mode.Edge -> dp(26)
+            Mode.Compact -> dp(256)
+            Mode.Edge -> dp(28)
         }.coerceAtLeast(1)
 
         val height = when (next) {
-            Mode.Edge -> dp(72)
+            Mode.Edge -> dp(76)
             else -> WindowManager.LayoutParams.WRAP_CONTENT
         }
 
@@ -257,18 +260,52 @@ class FloatingTasbeehService : Service() {
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.START
-                y = location.getInt("y", dp(220))
                 val isRight = location.getBoolean("right", true)
-                x = if (isRight) (screenWidth() - width).coerceAtLeast(0) else 0
+                x = when (next) {
+                    Mode.Compact -> {
+                        val defaultX = if (isRight) (screenWidth() - width - dp(12)).coerceAtLeast(0) else dp(12)
+                        location.getInt("compact_x", defaultX)
+                    }
+                    Mode.Expanded -> {
+                        val defaultX = ((screenWidth() - width) / 2).coerceAtLeast(0)
+                        location.getInt("expanded_x", defaultX)
+                    }
+                    Mode.Edge -> {
+                        if (isRight) (screenWidth() - width).coerceAtLeast(0) else 0
+                    }
+                }
+                y = when (next) {
+                    Mode.Compact -> location.getInt("compact_y", dp(220))
+                    Mode.Expanded -> location.getInt("expanded_y", dp(180))
+                    Mode.Edge -> location.getInt("y", dp(220))
+                }
                 title = "Werd Smart Edge Tasbeeh"
             }
         } else {
             window.width = width
             window.height = height
             window.flags = windowFlags
-            val dockRight = location.getBoolean("right", true)
-            window.x = if (dockRight) (screenWidth() - width).coerceAtLeast(0) else 0
-            window.y = window.y.coerceIn(dp(40), (screenHeight() - dp(120)).coerceAtLeast(dp(60)))
+            val isRight = location.getBoolean("right", true)
+            when (next) {
+                Mode.Compact -> {
+                    val defaultX = if (isRight) (screenWidth() - width - dp(12)).coerceAtLeast(0) else dp(12)
+                    val savedX = location.getInt("compact_x", defaultX)
+                    window.x = savedX.coerceIn(dp(6), (screenWidth() - width - dp(6)).coerceAtLeast(0))
+                    val savedY = location.getInt("compact_y", dp(220))
+                    window.y = savedY.coerceIn(dp(40), (screenHeight() - dp(180)).coerceAtLeast(dp(40)))
+                }
+                Mode.Expanded -> {
+                    val defaultX = ((screenWidth() - width) / 2).coerceAtLeast(0)
+                    val savedX = location.getInt("expanded_x", defaultX)
+                    window.x = savedX.coerceIn(dp(6), (screenWidth() - width - dp(6)).coerceAtLeast(0))
+                    val savedY = location.getInt("expanded_y", dp(180))
+                    window.y = savedY.coerceIn(dp(40), (screenHeight() - dp(240)).coerceAtLeast(dp(40)))
+                }
+                Mode.Edge -> {
+                    window.x = if (isRight) (screenWidth() - width).coerceAtLeast(0) else 0
+                    window.y = location.getInt("y", dp(220)).coerceIn(dp(40), (screenHeight() - dp(120)).coerceAtLeast(dp(60)))
+                }
+            }
         }
 
         val replacement = render()
@@ -277,7 +314,7 @@ class FloatingTasbeehService : Service() {
                 manager.removeViewImmediate(old)
                 view = null
             }
-            window.alpha = if (next == Mode.Edge) 0.85f else 1.0f
+            window.alpha = 1.0f
             manager.addView(replacement, window)
             view = replacement
 
@@ -371,8 +408,8 @@ class FloatingTasbeehService : Service() {
             return LinearLayout(overlayContext).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                minimumWidth = dp(26)
-                minimumHeight = dp(72)
+                minimumWidth = dp(28)
+                minimumHeight = dp(76)
                 background = GradientDrawable().apply {
                     setColor(elevated.toInt())
                     if (isRight) {
@@ -396,11 +433,64 @@ class FloatingTasbeehService : Service() {
                 addView(label(chevron, 22f, isBold = true).apply {
                     setTextColor(accent.toInt())
                 })
-                setOnClickListener {
-                    setWindowAlpha(1.0f)
-                    moveTo(Mode.Compact)
+
+                var downX = 0f
+                var downY = 0f
+                var originX = 0
+                var originY = 0
+                var isMoved = false
+
+                setOnTouchListener { _, event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            setEdgeAlpha(1.0f)
+                            edgeFadeJob?.cancel()
+                            originX = window.x
+                            originY = window.y
+                            downX = event.rawX
+                            downY = event.rawY
+                            isMoved = false
+                            true
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            val dx = event.rawX - downX
+                            val dy = event.rawY - downY
+                            if (abs(dx) > dp(6) || abs(dy) > dp(6)) {
+                                isMoved = true
+                                window.x = (originX + dx.toInt()).coerceIn(
+                                    0,
+                                    (screenWidth() - window.width).coerceAtLeast(0)
+                                )
+                                window.y = (originY + dy.toInt()).coerceIn(
+                                    dp(40),
+                                    (screenHeight() - dp(120)).coerceAtLeast(dp(40))
+                                )
+                                view?.let { if (it.isAttachedToWindow) manager.updateViewLayout(it, window) }
+                            }
+                            true
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            if (isMoved) {
+                                val newIsRight = (window.x + window.width / 2) >= screenWidth() / 2
+                                val finalX = if (newIsRight) (screenWidth() - window.width).coerceAtLeast(0) else 0
+                                window.x = finalX
+                                location.edit()
+                                    .putBoolean("right", newIsRight)
+                                    .putInt("y", window.y)
+                                    .apply()
+                                moveTo(Mode.Edge)
+                            } else {
+                                moveTo(Mode.Compact)
+                            }
+                            true
+                        }
+                        MotionEvent.ACTION_CANCEL -> {
+                            startEdgeFade()
+                            true
+                        }
+                        else -> false
+                    }
                 }
-                drag(this, snap = true, isEdge = true)
             }
         }
 
@@ -411,7 +501,7 @@ class FloatingTasbeehService : Service() {
             return LinearLayout(overlayContext).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
-                setPadding(dp(12), dp(8), dp(12), dp(10))
+                setPadding(dp(12), dp(6), dp(12), dp(10))
                 background = background(20, strokeWidth = 1)
 
                 // Outside touch detection -> collapse to Edge
@@ -422,40 +512,53 @@ class FloatingTasbeehService : Service() {
                     } else false
                 }
 
-                // Top row: Dhikr text & Controls (Expand, Edge, Close)
+                // 1. Dedicated Top Drag Pill Handle
+                val dragHandle = LinearLayout(overlayContext).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                    setPadding(0, dp(2), 0, dp(4))
+                    contentDescription = "اسحب لتحريك السبحة"
+
+                    val pill = View(overlayContext).apply {
+                        background = GradientDrawable().apply {
+                            setColor(accent.toInt().let { (it and 0x00FFFFFF) or 0x60000000 })
+                            cornerRadius = dp(4).toFloat()
+                        }
+                    }
+                    addView(pill, LinearLayout.LayoutParams(dp(54), dp(5)))
+                }
+                drag(dragHandle, modeToSave = Mode.Compact)
+                addView(dragHandle, LinearLayout.LayoutParams(-1, -2))
+
+                // 2. Top row: Edge button, 2-line clickable dhikr title (opens Expanded), Expand button
                 val topRow = LinearLayout(overlayContext).apply {
                     orientation = LinearLayout.HORIZONTAL
                     layoutDirection = View.LAYOUT_DIRECTION_RTL
                     gravity = Gravity.CENTER_VERTICAL
 
-                    val grip = label("━", 14f).apply {
-                        minWidth = dp(24)
-                        minHeight = dp(24)
-                        contentDescription = "اسحب لتحريك السبحة"
+                    val edgeBtn = iconBtn("⇥") { moveTo(Mode.Edge) }.apply {
+                        contentDescription = "تصغير للحافة"
                     }
-                    drag(grip, snap = true)
 
-                    val dhikrTitle = label(item?.getEffectiveTasbeehText().orEmpty(), 14.5f, isBold = true).apply {
+                    val dhikrTitle = label(item?.getEffectiveTasbeehText().orEmpty(), 14f, isBold = true).apply {
                         maxLines = 2
-                        gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                        setPadding(dp(4), 0, dp(4), 0)
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        gravity = Gravity.CENTER
+                        setPadding(dp(6), dp(2), dp(6), dp(2))
+                        contentDescription = "انقر لقراءة الذكر كاملاً"
+                        setOnClickListener {
+                            resetInactivityTimer()
+                            moveTo(Mode.Expanded)
+                        }
                     }
 
                     val expandBtn = iconBtn("⤢") { moveTo(Mode.Expanded) }.apply {
                         contentDescription = "توسيع السبحة"
                     }
-                    val edgeBtn = iconBtn("⇥") { moveTo(Mode.Edge) }.apply {
-                        contentDescription = "تصغير للحافة"
-                    }
-                    val closeBtn = iconBtn("✕", isAccent = true) { dismissCompletely() }.apply {
-                        contentDescription = "إغلاق نهائي"
-                    }
 
-                    addView(grip, LinearLayout.LayoutParams(-2, -2))
+                    addView(edgeBtn, LinearLayout.LayoutParams(dp(36), dp(36)))
                     addView(dhikrTitle, LinearLayout.LayoutParams(0, -2, 1f))
-                    addView(expandBtn, LinearLayout.LayoutParams(dp(32), dp(32)))
-                    addView(edgeBtn, LinearLayout.LayoutParams(dp(32), dp(32)))
-                    addView(closeBtn, LinearLayout.LayoutParams(dp(32), dp(32)))
+                    addView(expandBtn, LinearLayout.LayoutParams(dp(36), dp(36)))
                 }
                 addView(topRow, LinearLayout.LayoutParams(-1, -2))
 
@@ -485,28 +588,31 @@ class FloatingTasbeehService : Service() {
                     setMargins(0, dp(6), 0, dp(6))
                 })
 
-                // Bottom control row: Prev (›), Next (‹), Undo (↶), Goal toggle
+                // Bottom control row: Undo (↶), Prev (›), Next (‹)
                 val bottomRow = LinearLayout(overlayContext).apply {
                     orientation = LinearLayout.HORIZONTAL
                     layoutDirection = View.LAYOUT_DIRECTION_RTL
-                    gravity = Gravity.CENTER_VERTICAL
+                    gravity = Gravity.CENTER
 
-                    addView(iconBtn("›") { cycleDhikr(forward = false) }.apply {
-                        contentDescription = "الذكر السابق"
-                    }, LinearLayout.LayoutParams(dp(38), dp(36)))
-
-                    addView(iconBtn("‹") { cycleDhikr(forward = true) }.apply {
-                        contentDescription = "الذكر التالي"
-                    }, LinearLayout.LayoutParams(dp(38), dp(36)))
-
-                    addView(iconBtn("↶") { undoCount() }.apply {
+                    val undoBtn = iconBtn("↶") { undoCount() }.apply {
                         contentDescription = "تراجع عن تسبيحة"
-                    }, LinearLayout.LayoutParams(dp(38), dp(36)))
-
-                    val goalBtn = textBtn(if (free) "حر ∞" else "$target×") { toggleFreeMode() }.apply {
-                        contentDescription = "تغيير الهدف"
                     }
-                    addView(goalBtn, LinearLayout.LayoutParams(0, dp(36), 1f))
+                    val prevBtn = iconBtn("›") { cycleDhikr(forward = false) }.apply {
+                        contentDescription = "الذكر السابق"
+                    }
+                    val nextBtn = iconBtn("‹") { cycleDhikr(forward = true) }.apply {
+                        contentDescription = "الذكر التالي"
+                    }
+
+                    addView(undoBtn, LinearLayout.LayoutParams(dp(56), dp(36)).apply {
+                        setMargins(dp(4), 0, dp(4), 0)
+                    })
+                    addView(prevBtn, LinearLayout.LayoutParams(dp(56), dp(36)).apply {
+                        setMargins(dp(4), 0, dp(4), 0)
+                    })
+                    addView(nextBtn, LinearLayout.LayoutParams(dp(56), dp(36)).apply {
+                        setMargins(dp(4), 0, dp(4), 0)
+                    })
                 }
                 addView(bottomRow, LinearLayout.LayoutParams(-1, -2))
             }
@@ -535,12 +641,20 @@ class FloatingTasbeehService : Service() {
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL
 
-                val grip = label("━━", 16f).apply {
-                    minWidth = dp(40)
-                    minHeight = dp(28)
+                val grip = View(overlayContext).apply {
+                    background = GradientDrawable().apply {
+                        setColor(accent.toInt().let { (it and 0x00FFFFFF) or 0x60000000 })
+                        cornerRadius = dp(4).toFloat()
+                    }
                     contentDescription = "اسحب لتحريك السبحة"
                 }
-                drag(grip, snap = true)
+                val gripContainer = LinearLayout(overlayContext).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                    setPadding(dp(4), dp(4), dp(4), dp(4))
+                    addView(grip, LinearLayout.LayoutParams(dp(48), dp(5)))
+                }
+                drag(gripContainer, modeToSave = Mode.Expanded)
 
                 val categoryBadge = label(item?.category?.ifBlank { "التسبيح" } ?: "التسبيح", 12f).apply {
                     setTextColor(secondaryTextColor.toInt())
@@ -557,15 +671,17 @@ class FloatingTasbeehService : Service() {
                     contentDescription = "إغلاق نهائي"
                 }
 
-                addView(grip, LinearLayout.LayoutParams(-2, -2))
-                addView(categoryBadge, LinearLayout.LayoutParams(0, -2, 1f))
-                addView(minimizeBtn, LinearLayout.LayoutParams(dp(34), dp(32)))
-                addView(edgeBtn, LinearLayout.LayoutParams(dp(34), dp(32)))
-                addView(closeBtn, LinearLayout.LayoutParams(dp(34), dp(32)))
+                addView(gripContainer, LinearLayout.LayoutParams(-2, -2))
+                addView(categoryBadge, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    setMargins(dp(6), 0, dp(6), 0)
+                })
+                addView(minimizeBtn, LinearLayout.LayoutParams(dp(36), dp(36)))
+                addView(edgeBtn, LinearLayout.LayoutParams(dp(36), dp(36)))
+                addView(closeBtn, LinearLayout.LayoutParams(dp(36), dp(36)))
             }
             addView(topRow, LinearLayout.LayoutParams(-1, -2))
 
-            // Dhikr text row with previous (›) and next (‹) controls
+            // Dhikr text row with previous (›) and next (‹) controls, and scrollable text
             val dhikrRow = LinearLayout(overlayContext).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -575,17 +691,21 @@ class FloatingTasbeehService : Service() {
                 val prevBtn = iconBtn("›") { cycleDhikr(forward = false) }.apply {
                     contentDescription = "الذكر السابق"
                 }
-                val dhikrText = label(item?.getEffectiveTasbeehText().orEmpty(), 18f, isBold = true).apply {
-                    maxLines = 4
-                    setPadding(dp(6), 0, dp(6), 0)
+                val dhikrText = label(item?.getEffectiveTasbeehText().orEmpty(), 17f, isBold = true).apply {
+                    setPadding(dp(6), dp(4), dp(6), dp(4))
                 }
+                val textScrollView = android.widget.ScrollView(overlayContext).apply {
+                    isVerticalScrollBarEnabled = true
+                    addView(dhikrText)
+                }
+
                 val nextBtn = iconBtn("‹") { cycleDhikr(forward = true) }.apply {
                     contentDescription = "الذكر التالي"
                 }
 
-                addView(prevBtn, LinearLayout.LayoutParams(dp(38), dp(38)))
-                addView(dhikrText, LinearLayout.LayoutParams(0, -2, 1f))
-                addView(nextBtn, LinearLayout.LayoutParams(dp(38), dp(38)))
+                addView(prevBtn, LinearLayout.LayoutParams(dp(36), dp(36)))
+                addView(textScrollView, LinearLayout.LayoutParams(0, dp(90), 1f))
+                addView(nextBtn, LinearLayout.LayoutParams(dp(36), dp(36)))
             }
             addView(dhikrRow, LinearLayout.LayoutParams(-1, -2))
 
@@ -621,7 +741,7 @@ class FloatingTasbeehService : Service() {
             counterView = primaryCountBtn
             addView(primaryCountBtn, LinearLayout.LayoutParams(-1, -2))
 
-            // Secondary controls: Undo, Reset, Goal toggle
+            // Secondary controls: Undo, Reset, Goal toggle (33 / 100 / ∞)
             addView(LinearLayout(overlayContext).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -629,7 +749,7 @@ class FloatingTasbeehService : Service() {
 
                 addView(textBtn("↶ تراجع") { undoCount() }, LinearLayout.LayoutParams(0, -2, 1f))
                 addView(textBtn("↺ إعادة") { resetCount() }, LinearLayout.LayoutParams(0, -2, 1f))
-                addView(textBtn(if (free) "حر ∞" else "هدف: $target") { toggleFreeMode() }, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(textBtn(if (free) "هدف: حر ∞" else "هدف: $target") { cycleTarget() }, LinearLayout.LayoutParams(0, -2, 1f))
             }, LinearLayout.LayoutParams(-1, -2))
 
             // Bottom action buttons: Return to Edge, Minimize, Close Completely
@@ -694,14 +814,19 @@ class FloatingTasbeehService : Service() {
         }
     }
 
-    private fun toggleFreeMode() {
+    private fun cycleTarget() {
         val current = item ?: return
         triggerHaptic()
         resetInactivityTimer()
-        free = !free
+        when {
+            !free && target == 33 -> { target = 100; free = false }
+            !free && target == 100 -> { free = true }
+            else -> { target = 33; free = false }
+        }
         scope.launch {
             operations.withLock {
                 repo.saveTasbeehProgress(current.id, count, target, free, current.category)
+                counterView?.text = counterText()
                 if (view != null) moveTo(mode)
             }
         }
@@ -732,7 +857,7 @@ class FloatingTasbeehService : Service() {
         }
     }
 
-    private fun drag(handle: View, snap: Boolean, isEdge: Boolean = false) {
+    private fun drag(handle: View, modeToSave: Mode) {
         var originX = 0
         var originY = 0
         var downX = 0f
@@ -741,7 +866,7 @@ class FloatingTasbeehService : Service() {
         handle.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    setWindowAlpha(1.0f)
+                    setEdgeAlpha(1.0f)
                     inactivityJob?.cancel()
                     edgeFadeJob?.cancel()
                     originX = window.x
@@ -756,12 +881,13 @@ class FloatingTasbeehService : Service() {
                     val dy = event.rawY - downY
                     moved = moved || abs(dx) > dp(5) || abs(dy) > dp(5)
                     if (moved) {
-                        if (!isEdge) {
-                            window.x = (originX + dx.toInt()).coerceIn(0, (screenWidth() - window.width).coerceAtLeast(0))
-                        }
+                        window.x = (originX + dx.toInt()).coerceIn(
+                            dp(6),
+                            (screenWidth() - window.width - dp(6)).coerceAtLeast(0)
+                        )
                         window.y = (originY + dy.toInt()).coerceIn(
                             dp(40),
-                            (screenHeight() - dp(80) - (view?.height ?: 0)).coerceAtLeast(dp(40))
+                            (screenHeight() - (view?.height ?: dp(140)) - dp(80)).coerceAtLeast(dp(40))
                         )
                         view?.let { if (it.isAttachedToWindow) manager.updateViewLayout(it, window) }
                     }
@@ -769,17 +895,21 @@ class FloatingTasbeehService : Service() {
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (moved) {
-                        val isRight = if (isEdge) {
-                            location.getBoolean("right", true)
-                        } else {
-                            window.x + window.width / 2 >= screenWidth() / 2
+                        if (modeToSave == Mode.Compact) {
+                            val isRight = window.x + window.width / 2 >= screenWidth() / 2
+                            location.edit()
+                                .putInt("compact_x", window.x)
+                                .putInt("compact_y", window.y)
+                                .putBoolean("right", isRight)
+                                .apply()
+                        } else if (modeToSave == Mode.Expanded) {
+                            location.edit()
+                                .putInt("expanded_x", window.x)
+                                .putInt("expanded_y", window.y)
+                                .apply()
                         }
-                        if (snap) {
-                            window.x = if (isRight) (screenWidth() - window.width).coerceAtLeast(0) else 0
-                            view?.let { if (it.isAttachedToWindow) manager.updateViewLayout(it, window) }
-                        }
-                        location.edit().putInt("y", window.y).putBoolean("right", isRight).apply()
-                        if (isEdge) startEdgeFade() else resetInactivityTimer()
+                        resetInactivityTimer()
+                        view?.let { if (it.isAttachedToWindow) manager.updateViewLayout(it, window) }
                     } else if (event.actionMasked == MotionEvent.ACTION_UP) {
                         handle.performClick()
                     }

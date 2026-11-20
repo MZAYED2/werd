@@ -13,9 +13,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zekr.widget.data.model.ContentType
+import com.zekr.widget.data.preferences.WidgetPreferencesRepository
 import com.zekr.widget.ui.theme.sourceTextColor
 import com.zekr.widget.data.model.ZekrEntity
 import com.zekr.widget.data.repository.ZekrRepository
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -50,6 +52,8 @@ private fun ZekrEntity.guidedTarget() = getEffectiveDocumentedCount()?.coerceAtL
 @Composable
 internal fun GuidedWirdCard(allItems: List<ZekrEntity>, openQuran: Boolean, onQuranOpened: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repo = remember(context) { WidgetPreferencesRepository(context) }
     val prefs = remember(context) {
         context.applicationContext.getSharedPreferences("werd_guided_sessions", Context.MODE_PRIVATE)
     }
@@ -157,6 +161,11 @@ internal fun GuidedWirdCard(allItems: List<ZekrEntity>, openQuran: Boolean, onQu
                                 ordered.firstOrNull { (updated[it.id] ?: 0) < it.guidedTarget() }
                             }
                             val done = next == null
+                            if (read + 1 >= target || done) {
+                                scope.launch {
+                                    repo.recordCompletedReadItem(item.type)
+                                }
+                            }
                             save(group, state.copy(
                                 currentItem = next?.id ?: item.id,
                                 repetitions = updated,

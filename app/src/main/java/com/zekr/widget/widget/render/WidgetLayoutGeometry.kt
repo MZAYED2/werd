@@ -132,9 +132,9 @@ object WidgetLayoutGeometry {
                 openWerdCenterX = margin + button / 2f
 
                 headerCenter = null
-                textTop = (margin * 0.8f).coerceIn(6f, 12f)
-                val textBottom = barCenterY - button / 2f - 4f
-                availableTextHeight = (textBottom - textTop).coerceAtLeast(30f)
+                textTop = (margin * 0.5f).coerceIn(4f, 9f)
+                val textBottom = barCenterY - button / 2f - 2f
+                availableTextHeight = (textBottom - textTop).coerceAtLeast(32f)
                 textStartX = margin
                 maxTextWidth = (width - 2 * margin).coerceAtLeast(50f)
 

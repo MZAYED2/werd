@@ -112,6 +112,17 @@ data class NotificationSettings(
     val salawatEnabled: Boolean = true,
     val tasbeehEnabled: Boolean = true,
     val wirdEnabled: Boolean = true,
+    val remindersDailyCount: Int = 3,
+    val readingEnabled: Boolean = false,
+    val readingQuranEnabled: Boolean = true,
+    val readingHadithEnabled: Boolean = true,
+    val readingAthkarEnabled: Boolean = true,
+    val readingDailyCount: Int = 5,
+    val lockScreenEnabled: Boolean = false,
+    val lockScreenIntervalMinutes: Int = 30,
+    val lockScreenQuranEnabled: Boolean = true,
+    val lockScreenHadithEnabled: Boolean = true,
+    val lockScreenAthkarEnabled: Boolean = true,
     val dailyCount: Int = 3,
     val startHour: Int = 8,
     val endHour: Int = 22,
@@ -293,6 +304,17 @@ class WidgetPreferencesRepository(private val context: Context) {
             salawatEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_SALAWAT_ENABLED] ?: true,
             tasbeehEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_TASBEEH_ENABLED] ?: true,
             wirdEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_WIRD_ENABLED] ?: true,
+            remindersDailyCount = (prefs[intPreferencesKey("pref_notif_reminders_daily_count")] ?: 3).coerceIn(1, 10),
+            readingEnabled = prefs[booleanPreferencesKey("pref_notif_reading_enabled")] ?: false,
+            readingQuranEnabled = prefs[booleanPreferencesKey("pref_notif_reading_quran_enabled")] ?: true,
+            readingHadithEnabled = prefs[booleanPreferencesKey("pref_notif_reading_hadith_enabled")] ?: true,
+            readingAthkarEnabled = prefs[booleanPreferencesKey("pref_notif_reading_athkar_enabled")] ?: true,
+            readingDailyCount = (prefs[intPreferencesKey("pref_notif_reading_daily_count")] ?: 5).coerceIn(1, 20),
+            lockScreenEnabled = prefs[booleanPreferencesKey("pref_notif_lockscreen_enabled")] ?: false,
+            lockScreenIntervalMinutes = (prefs[intPreferencesKey("pref_notif_lockscreen_interval")] ?: 30).coerceIn(15, 180),
+            lockScreenQuranEnabled = prefs[booleanPreferencesKey("pref_notif_lockscreen_quran")] ?: true,
+            lockScreenHadithEnabled = prefs[booleanPreferencesKey("pref_notif_lockscreen_hadith")] ?: true,
+            lockScreenAthkarEnabled = prefs[booleanPreferencesKey("pref_notif_lockscreen_athkar")] ?: true,
             dailyCount = (prefs[WidgetPreferenceKeys.KEY_NOTIF_COUNT_PER_DAY] ?: 3).coerceIn(1, 20),
             startHour = (prefs[WidgetPreferenceKeys.KEY_NOTIF_START_HOUR] ?: 8).coerceIn(0, 23),
             endHour = (prefs[WidgetPreferenceKeys.KEY_NOTIF_END_HOUR] ?: 22).coerceIn(0, 23),
@@ -300,6 +322,29 @@ class WidgetPreferencesRepository(private val context: Context) {
             duaEnabled = prefs[WidgetPreferenceKeys.KEY_NOTIF_DUA_ENABLED] ?: false,
             contentEnabled = prefs[booleanPreferencesKey("pref_notif_content_enabled")] ?: false
         )
+    }
+
+    val mushafLastPageFlow: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[intPreferencesKey("pref_mushaf_last_page")] ?: 1).coerceIn(1, 604)
+    }
+
+    suspend fun getMushafLastPage(): Int = mushafLastPageFlow.first()
+
+    suspend fun saveMushafLastPage(page: Int) {
+        val safePage = page.coerceIn(1, 604)
+        context.dataStore.edit { prefs ->
+            prefs[intPreferencesKey("pref_mushaf_last_page")] = safePage
+        }
+    }
+
+    val mushafNightModeFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[booleanPreferencesKey("mushaf_night_mode")] ?: false
+    }
+
+    suspend fun saveMushafNightMode(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[booleanPreferencesKey("mushaf_night_mode")] = enabled
+        }
     }
 
     val tasbeehStateFlow: Flow<TasbeehState> = context.dataStore.data.map { prefs ->
@@ -355,12 +400,95 @@ class WidgetPreferencesRepository(private val context: Context) {
             prefs[WidgetPreferenceKeys.KEY_NOTIF_SALAWAT_ENABLED] = settings.salawatEnabled
             prefs[WidgetPreferenceKeys.KEY_NOTIF_TASBEEH_ENABLED] = settings.tasbeehEnabled
             prefs[WidgetPreferenceKeys.KEY_NOTIF_WIRD_ENABLED] = settings.wirdEnabled
+            prefs[intPreferencesKey("pref_notif_reminders_daily_count")] = settings.remindersDailyCount.coerceIn(1, 10)
+            prefs[booleanPreferencesKey("pref_notif_reading_enabled")] = settings.readingEnabled
+            prefs[booleanPreferencesKey("pref_notif_reading_quran_enabled")] = settings.readingQuranEnabled
+            prefs[booleanPreferencesKey("pref_notif_reading_hadith_enabled")] = settings.readingHadithEnabled
+            prefs[booleanPreferencesKey("pref_notif_reading_athkar_enabled")] = settings.readingAthkarEnabled
+            prefs[intPreferencesKey("pref_notif_reading_daily_count")] = settings.readingDailyCount.coerceIn(1, 20)
+            prefs[booleanPreferencesKey("pref_notif_lockscreen_enabled")] = settings.lockScreenEnabled
+            prefs[intPreferencesKey("pref_notif_lockscreen_interval")] = settings.lockScreenIntervalMinutes.coerceIn(15, 180)
+            prefs[booleanPreferencesKey("pref_notif_lockscreen_quran")] = settings.lockScreenQuranEnabled
+            prefs[booleanPreferencesKey("pref_notif_lockscreen_hadith")] = settings.lockScreenHadithEnabled
+            prefs[booleanPreferencesKey("pref_notif_lockscreen_athkar")] = settings.lockScreenAthkarEnabled
             prefs[WidgetPreferenceKeys.KEY_NOTIF_DUA_ENABLED] = settings.duaEnabled
             prefs[booleanPreferencesKey("pref_notif_content_enabled")] = settings.contentEnabled
             prefs[WidgetPreferenceKeys.KEY_NOTIF_COUNT_PER_DAY] = settings.dailyCount.coerceIn(1, 20)
             prefs[WidgetPreferenceKeys.KEY_NOTIF_START_HOUR] = settings.startHour.coerceIn(0, 23)
             prefs[WidgetPreferenceKeys.KEY_NOTIF_END_HOUR] = settings.endHour.coerceIn(0, 23)
             prefs[WidgetPreferenceKeys.KEY_NOTIF_QUIET_HOURS_ENABLED] = settings.quietHoursEnabled
+        }
+    }
+
+    suspend fun recordCompletedReadingFromNotification(
+        itemType: ContentType,
+        today: java.time.LocalDate = java.time.LocalDate.now()
+    ) {
+        context.dataStore.edit { prefs ->
+            val stats = decodeWirdStats(prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON].orEmpty())
+            val updated = stats.withRecordedCompletion(itemType, 1, today)
+            prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON] = json.encodeToString(updated)
+        }
+    }
+
+    suspend fun recordCompletedReadItem(
+        itemType: ContentType,
+        count: Int = 1,
+        today: java.time.LocalDate = java.time.LocalDate.now()
+    ) {
+        context.dataStore.edit { prefs ->
+            val stats = decodeWirdStats(prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON].orEmpty())
+            val updated = stats.withRecordedCompletion(itemType, count, today)
+            prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON] = json.encodeToString(updated)
+        }
+    }
+
+    suspend fun recordCompletedFromNotification(
+        type: ReminderType,
+        contentType: ContentType,
+        notificationId: Int,
+        today: java.time.LocalDate = java.time.LocalDate.now()
+    ): Boolean {
+        var recorded = false
+        context.dataStore.edit { prefs ->
+            val notifKey = stringPreferencesKey("pref_confirmed_notif_instance_$notificationId")
+            if (notificationId > 0 && prefs[notifKey] != null) {
+                return@edit
+            }
+            if (notificationId > 0) {
+                prefs[notifKey] = today.toString()
+            }
+            when (type) {
+                ReminderType.SALAWAT -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_SALAWAT_DATE] = today.toString()
+                ReminderType.TASBEEH -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_TASBEEH_DATE] = today.toString()
+                ReminderType.WIRD -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_WIRD_DATE] = today.toString()
+                ReminderType.DUA -> prefs[WidgetPreferenceKeys.KEY_NOTIF_CONFIRMED_DUA_DATE] = today.toString()
+                else -> prefs[stringPreferencesKey("pref_notif_confirmed_${type.id}_date")] = today.toString()
+            }
+
+            val stats = decodeWirdStats(prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON].orEmpty())
+            val updated = if (type == ReminderType.TASBEEH || type == ReminderType.SALAWAT) {
+                val currentTasbeehCount = prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] ?: 0
+                prefs[WidgetPreferenceKeys.KEY_LAST_TASBEEH_COUNT] = currentTasbeehCount + 1
+                stats.withRecordedTap(contentType, completedItem = true, today = today)
+            } else {
+                stats.withRecordedCompletion(contentType, count = 1, today = today)
+            }
+            prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON] = json.encodeToString(updated)
+            recorded = true
+        }
+        return recorded
+    }
+
+    suspend fun recordMushafPagesRead(
+        pagesCount: Int,
+        today: java.time.LocalDate = java.time.LocalDate.now()
+    ) {
+        if (pagesCount <= 0) return
+        context.dataStore.edit { prefs ->
+            val stats = decodeWirdStats(prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON].orEmpty())
+            val updated = stats.withRecordedCompletion(ContentType.QURAN_AYAH, pagesCount, today)
+            prefs[WidgetPreferenceKeys.KEY_WIRD_STATS_JSON] = json.encodeToString(updated)
         }
     }
 

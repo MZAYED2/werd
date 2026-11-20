@@ -62,11 +62,11 @@ internal fun rememberDemoPlayback(): DemoPlayback {
             title = title,
             ready = state.isReady,
             playing = state.isPlaying,
-            engaged = track != null,
+            engaged = state.isSessionActive,
             error = state.isError,
             position = state.currentPositionMs.toInt(),
             duration = state.durationMs.toInt(),
-            speed = state.playbackSpeed,
+            speed = 1.0f,
             repeating = state.isRepeating,
             timerActive = state.sleepTimerEndRealtimeMs > 0L,
             toggle = { WerdAudioPlayerManager.togglePlayPause() },
@@ -74,9 +74,9 @@ internal fun rememberDemoPlayback(): DemoPlayback {
             persist = {},
             previous = { WerdAudioPlayerManager.playPrevious() },
             next = { WerdAudioPlayerManager.playNext() },
-            changeSpeed = { WerdAudioPlayerManager.cycleSpeed() },
+            changeSpeed = {},
             toggleRepeat = { WerdAudioPlayerManager.toggleRepeat() },
-            toggleTimer = { WerdAudioPlayerManager.toggleSleepTimer() }
+            toggleTimer = { WerdAudioPlayerManager.setSleepTimerMinutes(15) }
         )
     }
 }
@@ -264,6 +264,64 @@ internal fun AudioWirdScreen(playback: DemoPlayback?) {
 @Composable
 private fun ActiveTrackCard(state: com.zekr.widget.audio.PlayerUiState) {
     val track = state.currentTrack ?: return
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
+
+    if (showSleepTimerDialog) {
+        var selectedMinutes by remember { mutableIntStateOf(30) }
+        AlertDialog(
+            onDismissRequest = { showSleepTimerDialog = false },
+            title = { Text("مؤقت النوم") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "إيقاف تشغيل الصوتيات تلقائياً بعد انقضاء الوقت:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(15, 30, 60).forEach { mins ->
+                            FilterChip(
+                                selected = selectedMinutes == mins,
+                                onClick = { selectedMinutes = mins },
+                                label = { Text("$mins د") }
+                            )
+                        }
+                    }
+                    Text("أو اختر مدة مخصصة: $selectedMinutes دقيقة", style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = selectedMinutes.toFloat(),
+                        onValueChange = { selectedMinutes = it.toInt() },
+                        valueRange = 5f..120f,
+                        steps = 22
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    WerdAudioPlayerManager.setSleepTimerMinutes(selectedMinutes)
+                    showSleepTimerDialog = false
+                }) {
+                    Text("تفعيل المؤقت")
+                }
+            },
+            dismissButton = {
+                if (state.sleepTimerEndRealtimeMs > 0L) {
+                    TextButton(onClick = {
+                        WerdAudioPlayerManager.cancelSleepTimer()
+                        showSleepTimerDialog = false
+                    }) {
+                        Text("إلغاء المؤقت", color = MaterialTheme.colorScheme.error)
+                    }
+                } else {
+                    TextButton(onClick = { showSleepTimerDialog = false }) {
+                        Text("إغلاق")
+                    }
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -350,7 +408,7 @@ private fun ActiveTrackCard(state: com.zekr.widget.audio.PlayerUiState) {
             FilledTonalIconButton(onClick = { WerdAudioPlayerManager.playPrevious() }) {
                 Text("⏮", fontSize = 16.sp)
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(14.dp))
             Button(
                 onClick = { WerdAudioPlayerManager.togglePlayPause() },
                 modifier = Modifier.height(48.dp),
@@ -361,23 +419,25 @@ private fun ActiveTrackCard(state: com.zekr.widget.audio.PlayerUiState) {
                     fontWeight = FontWeight.Bold
                 )
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(14.dp))
             FilledTonalIconButton(onClick = { WerdAudioPlayerManager.playNext() }) {
                 Text("⏭", fontSize = 16.sp)
             }
+            Spacer(Modifier.width(10.dp))
+            IconButton(
+                onClick = { WerdAudioPlayerManager.stopPlayback() },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Text("⏹", fontSize = 16.sp, color = MaterialTheme.colorScheme.error)
+            }
         }
 
-        // Secondary Options
+        // Secondary Options: Repeat, Sleep Timer & Quran Continuous Scope
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedButton(
-                onClick = { WerdAudioPlayerManager.cycleSpeed() },
-                contentPadding = PaddingValues(horizontal = 8.dp)
-            ) {
-                Text("${state.playbackSpeed}×")
-            }
             FilterChip(
                 selected = state.isRepeating,
                 onClick = { WerdAudioPlayerManager.toggleRepeat() },
@@ -385,16 +445,32 @@ private fun ActiveTrackCard(state: com.zekr.widget.audio.PlayerUiState) {
             )
             FilterChip(
                 selected = state.sleepTimerEndRealtimeMs > 0L,
-                onClick = { WerdAudioPlayerManager.toggleSleepTimer() },
+                onClick = { showSleepTimerDialog = true },
                 label = {
                     val labelText = if (state.sleepTimerEndRealtimeMs > 0L) {
                         val mins = state.sleepTimerRemainingSeconds / 60
                         val secs = state.sleepTimerRemainingSeconds % 60
                         "مؤقت: $mins:${secs.toString().padStart(2, '0')}"
-                    } else "مؤقت ١٥ د"
+                    } else "مؤقت النوم"
                     Text(labelText)
                 }
             )
+            if (track.surahNumber != null) {
+                FilterChip(
+                    selected = state.quranPlayScope == com.zekr.widget.audio.QuranPlayScope.CONTINUOUS_TO_END,
+                    onClick = {
+                        val next = if (state.quranPlayScope == com.zekr.widget.audio.QuranPlayScope.CONTINUOUS_TO_END) {
+                            com.zekr.widget.audio.QuranPlayScope.SINGLE_SURAH
+                        } else {
+                            com.zekr.widget.audio.QuranPlayScope.CONTINUOUS_TO_END
+                        }
+                        WerdAudioPlayerManager.setQuranPlayScope(next)
+                    },
+                    label = {
+                        Text(if (state.quranPlayScope == com.zekr.widget.audio.QuranPlayScope.CONTINUOUS_TO_END) "تلاوة متتالية لنهاية المصحف" else "سورة واحدة")
+                    }
+                )
+            }
         }
     }
 }
@@ -453,6 +529,7 @@ private fun TrackListItem(
 @Composable
 internal fun AudioMiniPlayer(playback: DemoPlayback, onOpen: () -> Unit) {
     val state by WerdAudioPlayerManager.state.collectAsState()
+    if (!state.isSessionActive) return
     val track = state.currentTrack ?: return
 
     Surface(
@@ -482,12 +559,19 @@ internal fun AudioMiniPlayer(playback: DemoPlayback, onOpen: () -> Unit) {
                     maxLines = 1
                 )
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(8.dp))
             FilledIconButton(
                 onClick = { WerdAudioPlayerManager.togglePlayPause() },
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(38.dp)
             ) {
                 Text(if (state.isPlaying) "⏸" else "▶", fontSize = 16.sp)
+            }
+            Spacer(Modifier.width(6.dp))
+            IconButton(
+                onClick = { WerdAudioPlayerManager.stopPlayback() },
+                modifier = Modifier.size(34.dp)
+            ) {
+                Text("✕", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

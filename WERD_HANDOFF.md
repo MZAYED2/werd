@@ -1,6 +1,53 @@
 # تسليم Werd
 
-- حزمة الإصدار المستقر v1.8.0-rc2 (الجولة الحالية):
+- حزمة تحسين تجربة الاستخدام الحقيقية وإصلاحات الأخطاء (UX Refinement & Bug Fixes):
+  1. معالجة النصوص الطويلة وشعار الويدجت:
+     - اعتماد `Layout.BREAK_STRATEGY_SIMPLE` عند وجود `ellipsize` في [GlassRenderer.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/widget/render/GlassRenderer.kt) لمنع انهيار نصوص الآيات الطويلة إلى سطر واحد مع `...`، وإضافة هامش تسامح عائم `+ 1.5f`.
+     - زيادة مساحة النص بـ 6-8dp عمودياً في [WidgetLayoutGeometry.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/widget/render/WidgetLayoutGeometry.kt) في المقاس المتوسط.
+     - تكبير إحداثيات الـ viewport في [ic_werd_logo.xml](file:///F:/Progects-Android-Studio/werd/app/src/main/res/drawable/ic_werd_logo.xml) ليملأ الشعار 90% من الدائرة، وتكبير رسمه في الويدجت إلى `btnRadius * 1.30f`.
+     - التحقق الفعلي من فتح التطبيق عند النقر على زر «فتح وِرد» في الويدجت مباشرة إلى تبويب «الرئيسية».
+  2. تبسيط وتحسين النمط المصغر للسبحة العائمة (Compact Mode):
+     - إعادة تصميم النمط المصغر في [FloatingTasbeehService.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/service/FloatingTasbeehService.kt): الصف العلوي (زر الحافة `⇥`، عنوان الذكر من سطرين يفتح النمط الموسع عند النقر، وزر التوسيع `⤢`)، الوسط (عداد رقمي كبير)، والصف السفلي (أزرار التنقل: `↶ تراجع`، التالي `›`، والسابق `‹`).
+     - نقل زر الإغلاق وتغيير الأهداف إلى النمط الموسع لتفادي الازدحام.
+  3. سحب وتثبيت سبحة الحافة الذكية يميناً ويساراً (Smart Edge Drag & Snap):
+     - دعم السحب الحر لمقبض الحافة في كافة الاتجاهات مع الالتصاق التلقائي (Snap) لأقرب حافة (يمين أو يسار) عند الإفلات، وحفظ موضع الارتفاع `y` والجهة `right` في SharedPreferences.
+     - تكييف انحناءات الكبسولة بصرياً حسب الحافة الحالية، وتوجيه رمز السهم للداخل (`‹` يميناً، `›` يساراً)، وفتح النمط المصغر نحو الداخل تلقائياً باتجاه منتصف الشاشة.
+  4. ترقية النمط الموسع (Expanded Mode):
+     - إضافة مقبض سحب علوي مخصص لتحريك البطاقة الموسعة بحرية مع حفظ إحداثياتها (`expanded_x`, `expanded_y`).
+     - إدراج نص الذكر داخل `ScrollView` رأسي لضمان قراءة الأذكار الطويلة كاملة.
+     - تبديل الأهداف الدورية بنقرة واحدة (`٣٣ ➔ ١٠٠ ➔ حر ∞`).
+  5. تعزيز ظهور إشعار شاشة القفل الدائم (Lock Screen Prominence):
+     - ضبط القناة في [NotificationHelper.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/notification/NotificationHelper.kt) بـ `lockscreenVisibility = Notification.VISIBILITY_PUBLIC`.
+     - ضبط الإشعار بـ `.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)`، `.setCategory(NotificationCompat.CATEGORY_STATUS)`، و `.setOngoing(true)`.
+  6. تجربة المصحف الشريف الفاخرة (Authentic Mushaf Reading):
+     - الوضع الليلي الفاخر (Quiet Luxury Dark Mode) في [MushafScreen.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/ui/screens/MushafScreen.kt) بـ `ColorMatrix` تدمج خلفية Midnight Jade `#131B17` مع نصوص Soft Ivory `#EAE6DA` مع صيانة التذهيب.
+     - زر تبديل الوضع الليلي والنهاري (☀️ / 🌙) في الشريط العلوي مستقل عن ثيم التطبيق ومحفوظ في DataStore.
+     - استعادة سطوع الشاشة الأصلي تلقائياً عند الخروج عبر `DisposableEffect`.
+     - إصلاح تقليب الصفحات بالسحب الأفقي بتعطيل `transformable` عندما يكون التكبير `scale <= 1f`.
+     - أزرار صريحة للتنقل بين الصفحات (`«` و `»`) في الشريط السفلي، وزر رجوع بارز (`←`) في الشريط العلوي، ونقر الصفحة للقراءة الغامرة.
+  7. تسجيل الإنجاز للأوراد غير القابلة للعد (Read-Only Awrad Completion):
+     - إضافة زر «تمت القراءة ✓» في [HomeDhikrCard.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/ui/screens/HomeDhikrCard.kt) مع تغذية بصرية فورية («تقبل الله · تم تسجيل القراءة ✓») وربطه بـ `onRecordRead` في [HomeScreen.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/ui/screens/HomeScreen.kt).
+     - ربط إكمال الجلسات في [GuidedWird.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/ui/screens/GuidedWird.kt) بـ `repo.recordCompletedReadItem(item.type)`.
+     - إضافة زر «تمت القراءة» لبطاقات الأذكار في [LibraryTab.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/ui/screens/LibraryTab.kt).
+  8. حل BUG-07 (تأثير زر «تم» على عداد التسبيح والويدجت):
+     - في [NotificationActionReceiver.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/notification/NotificationActionReceiver.kt) و [WidgetPreferencesRepository.kt](file:///F:/Progects-Android-Studio/werd/app/src/main/java/com/zekr/widget/data/preferences/WidgetPreferencesRepository.kt): إلغاء حظر التكرار اليومي الشامل وجعله لكل معرّف إشعار مستقل، وتسجيل الضغطة في سجل اليوم وزيادة `totalTasbihTaps`، وحفظ `KEY_LAST_TASBEEH_COUNT` وتحديث الويدجت.
+     - التحقق العملي: ارتفاع `totalTasbihTaps` من 101 إلى 102 فورياً واكتمال ورد اليوم 5/5 وظهور «أتممت ورد اليوم ✓».
+  9. البناء والتحقق:
+     - اجتياز 32 اختبار وحدة بنجاح.
+     - بناء الحزمة الرسمية الموقعة `werd-1.8-release.apk` وتثبيتها واختبارها على محاكي Samsung S25 Ultra (`emulator-5554`).
+     - **قيد صارم:** لم يتم تنفيذ أي `git push` أو إنشاء release أو رفع أي شيء، التزاماً بتعليمات المستخدم.
+
+- حزمة الإصدار المستقر v1.9.0 السابقة:
+  1. BUG-03 (إصلاح صوت الإشعارات واحترام DND): إنشاء 3 قنوات مستقلة بـ IMPORTANCE_LOW وصوت واهتزاز معدومين، فحص مباشر لـ currentInterruptionFilter لتخطي الإشعارات عند تفعيل وضع عدم الإزعاج، وفحص ساعات الهدوء دون طلب صلاحيات تجاوز DND.
+  2. BUG-04 (السبحة العائمة نمطا الحافة والمصغر وإلغاء إزعاج الخدمة): تعتيم الحافة بصرياً عبر view.alpha لضمان استلام اللمس واستعادة الشفافية 100% فورياً، مقبض سحب علوي مخصص 54dp × 5dp قابل للسحب المباشر بحرية مع حفظ compact_x و compact_y، وخفض إشعار الخدمة إلى IMPORTANCE_MIN بصمت تام وإزالته كلياً عند STOP.
+  3. BUG-05 (إخفاء المشغل المصغر Mini-Player عند انتهاء التشغيل): ربط المشغل بحالة isSessionActive، الإيقاف المؤقت يحتفظ بالمسار، الإيقاف التام أو إغلاق ✕ ينهي الجلسة ويخفي المشغل المصغر ويزيل إشعار الوسائط، والتشغيل البارد لا يظهر المشغل.
+  4. BUG-06 (تبسيط استوديو الويدجت): إزالة رقائق الأحجام الثلاثة، اعتماد بطاقة معاينة حية موحدة بارتفاع 216dp تعكس خصائص الويدجت ديناميكياً وأزرار سفلية كأيقونات بصرية فقط.
+  5. BUG-07 (زر «تم» في إشعار القراءة): النقر يسجل الإنجاز في WirdStats لليوم الحالي ويمنع التكرار المزدوج، مع عدم احتساب الإنجاز بمجرد العرض.
+  6. WERD-071 (أذكار شاشة القفل المستمرة): إشعار مستمر صامت LOCKSCREEN_NOTIFICATION_ID = 3001 يدوّر الآيات والأحاديث والأذكار بفترات مخصصة (15، 30، 60 دقيقة) للقراءة فقط دون احتساب إنجاز تلقائي.
+  7. فصل إعدادات التنبيهات: 3 أقسام مستقلة تماماً (القراءة المباشرة، تذكيرات المتابعة، أذكار شاشة القفل) مع قسم ساعات الهدوء وإيضاح DND.
+  8. تحسين الصوتيات ومؤقت النوم: إزالة زر السرعة 1.0x، إضافة Sleep Timer بخيارات 15، 30، 60 دقيقة ومدة مخصصة مع عد تنازلي والإيقاف عبر Media3، وخيار تلاوة سورة واحدة مقابل تلاوة متتالية لنهاية المصحف (114).
+  9. WERD-MUSHAF (المصحف الشريف 604 صفحات): 604 صفحات مصحف المدينة بالرسم العثماني، قارئ RTL تفاعلي، تكبير، فهرس السور والأجزاء، نافذة الانتقال لصفحة، متابعة القراءة، كاش خفيف للذاكرة والتخزين، رابط عميق من الإشعار، وبطاقة بارزة في الورد لتأكيد الصفحات المقروءة في إحصائيات اليوم.
+  10. التحقق والتجميع: اجتياز جميع اختبارات الوحدة، نجاح بناء werd-1.8-release.apk (16.4 MB) وتثبيته والتحقق منه على Samsung S25 Ultra emulator-5554 دون مسح البيانات.
   1. زر «فتح وِرد» في الويدجت: إضافة زر مخصص يفتح تبويب «الرئيسية» مباشرة. في المقاسات المتوسطة والموسعة يقع أقصى الشمال فعلياً (far left) بنفس حجم وستايل زري القائمة والسبحة ويستخدم رمز الشعار كـ VectorDrawable شفاف بدون خلفية خضراء (`ic_werd_logo.xml`). في المقاس المدمج تم وضعه في قائمة ☰ لمنع تضييق مساحة الذكر، والضغط على جسم الويدجت يقلب الذكر (WERD-022). زر تشغيل الصوتيات مؤجل بالكامل.
   2. إصلاح زر «افتح السبحة» في الإشعار (WERD-069): استخدام نمط Trampoline Activity في `ReminderOpenActivity.kt` عبر `PendingIntent.getActivity()`. بضغطة واحدة، ينغلق شريط الإشعارات فوراً وتظهر السبحة العائمة (`FloatingTasbeehService`) فوق الشاشة الحالية دون فتح `MainActivity`، مع الحفاظ على العداد المحفوظ.
   3. تفعيل الأذونات التمهيدية (Permissions Onboarding Flow): ظهور نافذة `PermissionsIntroDialog.kt` فقط عند التحديث/التثبيت الأول في حال وجود أذونات ناقصة، وإظهار الأذونات المفقودة فقط مع زر «لاحقاً». لا إزعاج متكرر، وتحديث سلس دون مسح البيانات.

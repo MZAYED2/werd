@@ -61,7 +61,8 @@ fun LibraryTabContent(
     onTogglePin: (ZekrEntity) -> Unit,
     onShareItem: (ZekrEntity) -> Unit,
     onSaveCustomItem: (ZekrEntity) -> Unit,
-    onDeleteCustomItem: (ZekrEntity) -> Unit
+    onDeleteCustomItem: (ZekrEntity) -> Unit,
+    onRecordRead: ((ZekrEntity) -> Unit)? = null
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(LibraryFilter.ALL) }
@@ -284,7 +285,8 @@ fun LibraryTabContent(
                     } else null,
                     onDelete = if (item.isCustom) {
                         { onDeleteCustomItem(item) }
-                    } else null
+                    } else null,
+                    onRecordRead = onRecordRead?.let { { it(item) } }
                 )
             }
         }
@@ -313,7 +315,8 @@ private fun ZekrLibraryCard(
     onTogglePin: () -> Unit,
     onShare: () -> Unit,
     onEdit: (() -> Unit)? = null,
-    onDelete: (() -> Unit)? = null
+    onDelete: (() -> Unit)? = null,
+    onRecordRead: (() -> Unit)? = null
 ) {
     val typeBadge = when {
         item.isCustom -> "ذكر خاص"
@@ -503,27 +506,57 @@ private fun ZekrLibraryCard(
                     }
                 }
 
-                // Pin / Unpin to Widget button
-                FilledTonalButton(
-                    onClick = onTogglePin,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                        contentColor = if (isPinned) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (isPinned) Icons.Filled.Check else Icons.Filled.Star,
-                        contentDescription = null,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isPinned) "إلغاء التثبيت" else "تثبيت في الويدجت",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (onRecordRead != null) {
+                        var isReadRecorded by remember(item.id) { mutableStateOf(false) }
+                        OutlinedButton(
+                            onClick = {
+                                if (!isReadRecorded) {
+                                    isReadRecorded = true
+                                    onRecordRead()
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(34.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (isReadRecorded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Text(
+                                text = if (isReadRecorded) "قرأت ✓" else "تمت القراءة",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // Pin / Unpin to Widget button
+                    FilledTonalButton(
+                        onClick = onTogglePin,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                            contentColor = if (isPinned) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPinned) Icons.Filled.Check else Icons.Filled.Star,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isPinned) "إلغاء التثبيت" else "تثبيت في الويدجت",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

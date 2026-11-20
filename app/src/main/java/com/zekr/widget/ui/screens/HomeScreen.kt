@@ -128,7 +128,7 @@ enum class ColorPickerTarget {
 private val TABS = listOf("النقوش", "الألوان", "الخط")
 
 private enum class Destination(val title: String) {
-    Home("الرئيسية"), Library("المكتبة"), Tasbeeh("السبحة"), Audio("الصوتيات"), Wird("الورد"),
+    Home("الرئيسية"), Library("المكتبة"), Tasbeeh("السبحة"), Mushaf("المصحف"), Audio("الصوتيات"), Wird("الورد"),
     Studio("استوديو الويدجت"), Settings("الإعدادات")
 }
 
@@ -298,13 +298,18 @@ fun HomeScreen(
                     openGuidedQuran = true
                     destination = Destination.Wird
                 }
+                com.zekr.widget.MainActivity.NAV_MUSHAF -> {
+                    destination = Destination.Mushaf
+                }
             }
-            if (initialTab in 1..com.zekr.widget.MainActivity.NAV_GUIDED_QURAN) onInitialTabHandled()
+            if (initialTab in 1..com.zekr.widget.MainActivity.NAV_MUSHAF) onInitialTabHandled()
         }
     }
     var settingsOrigin by rememberSaveable { mutableStateOf(Destination.Home) }
     BackHandler(!isWidgetConfigMode && destination != Destination.Home) {
-        destination = if (destination == Destination.Settings) settingsOrigin else Destination.Home
+        destination = if (destination == Destination.Settings) settingsOrigin
+                      else if (destination == Destination.Mushaf) Destination.Wird
+                      else Destination.Home
     }
     val screenState = rememberSaveableStateHolder()
     val demoPlayback = rememberDemoPlayback()
@@ -409,88 +414,97 @@ fun HomeScreen(
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                if (destination == Destination.Home) "وِرد" else destination.title,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (destination == Destination.Home) {
-                                Text("مساحة هادئة للذكر", style = MaterialTheme.typography.bodySmall)
+                if (destination != Destination.Mushaf) {
+                    CenterAlignedTopAppBar(
+                        title = {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    if (destination == Destination.Home) "وِرد" else destination.title,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (destination == Destination.Home) {
+                                    Text("مساحة هادئة للذكر", style = MaterialTheme.typography.bodySmall)
+                                }
                             }
-                        }
-                    },
-                    actions = {
-                        if (isWidgetConfigMode) {
-                            Button(
-                                onClick = {
-                                    syncJob?.cancel()
-                                    if (!isPreview) {
-                                        scope.launch {
-                                            if (widgetId > 0) {
-                                                prefRepo?.saveSettingsForWidget(widgetId, settings)
-                                                ZekrGlanceWidget.updateWidgetInstance(context, widgetId, settings)
-                                            } else {
-                                                prefRepo?.updateSettings(settings)
-                                                ZekrGlanceWidget.updateAllWidgets(context, settings)
+                        },
+                        actions = {
+                            if (isWidgetConfigMode) {
+                                Button(
+                                    onClick = {
+                                        syncJob?.cancel()
+                                        if (!isPreview) {
+                                            scope.launch {
+                                                if (widgetId > 0) {
+                                                    prefRepo?.saveSettingsForWidget(widgetId, settings)
+                                                    ZekrGlanceWidget.updateWidgetInstance(context, widgetId, settings)
+                                                } else {
+                                                    prefRepo?.updateSettings(settings)
+                                                    ZekrGlanceWidget.updateAllWidgets(context, settings)
+                                                }
+                                                onSaveAndClose()
                                             }
+                                        } else {
                                             onSaveAndClose()
                                         }
-                                    } else {
-                                        onSaveAndClose()
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                Text("تم وحفظ ✓", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.padding(end = 8.dp)
+                                ) {
+                                    Text("تم وحفظ ✓", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                }
+                            } else if (destination != Destination.Settings) {
+                                IconButton(onClick = {
+                                    settingsOrigin = destination
+                                    destination = Destination.Settings
+                                }) {
+                                    Icon(Icons.Outlined.Settings, contentDescription = "الإعدادات")
+                                }
                             }
-                        } else if (destination != Destination.Settings) {
-                            IconButton(onClick = {
-                                settingsOrigin = destination
-                                destination = Destination.Settings
-                            }) {
-                                Icon(Icons.Outlined.Settings, contentDescription = "الإعدادات")
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
+                        },
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background
+                        )
                     )
-                )
+                }
             },
             bottomBar = {
-                if (!isWidgetConfigMode) {
+                if (!isWidgetConfigMode && destination != Destination.Mushaf) {
                     Column {
                         if (destination != Destination.Audio && demoPlayback?.engaged == true) {
                             AudioMiniPlayer(demoPlayback) { destination = Destination.Audio }
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                            listOf(Destination.Home, Destination.Library, Destination.Tasbeeh, Destination.Audio, Destination.Wird)
-                                .forEach { section ->
-                                    NavigationBarItem(
-                                        selected = destination == section,
-                                        onClick = { destination = section },
-                                        icon = {
-                                            val iconSize = Modifier.size(28.dp)
-                                            when (section) {
-                                                Destination.Home -> Icon(Icons.Outlined.Home, null, iconSize)
-                                                Destination.Library -> Icon(Icons.Outlined.List, null, iconSize)
-                                                Destination.Audio -> Icon(Icons.Outlined.PlayArrow, null, iconSize)
-                                                Destination.Wird -> Icon(Icons.Outlined.DateRange, null, iconSize)
-                                                else -> TasbeehNavIcon(28.dp)
-                                            }
-                                        },
-                                        label = {
-                                            Text(section.title, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                            listOf(
+                                Destination.Home,
+                                Destination.Library,
+                                Destination.Tasbeeh,
+                                Destination.Mushaf,
+                                Destination.Audio,
+                                Destination.Wird
+                            ).forEach { section ->
+                                NavigationBarItem(
+                                    selected = destination == section,
+                                    onClick = { destination = section },
+                                    icon = {
+                                        val iconSize = Modifier.size(28.dp)
+                                        when (section) {
+                                            Destination.Home -> Icon(Icons.Outlined.Home, null, iconSize)
+                                            Destination.Library -> Icon(Icons.Outlined.List, null, iconSize)
+                                            Destination.Mushaf -> Text("📖", fontSize = 20.sp)
+                                            Destination.Audio -> Icon(Icons.Outlined.PlayArrow, null, iconSize)
+                                            Destination.Wird -> Icon(Icons.Outlined.DateRange, null, iconSize)
+                                            else -> TasbeehNavIcon(28.dp)
                                         }
-                                    )
-                                }
+                                    },
+                                    label = {
+                                        Text(section.title, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -579,6 +593,12 @@ fun HomeScreen(
                             },
                             onShare = {
                                 scope.launch { ZekrShareHelper.shareZekrCard(context, currentItem, settings) }
+                            },
+                            onRecordRead = {
+                                scope.launch {
+                                    prefRepo?.recordCompletedReadItem(currentItem.type)
+                                    ZekrGlanceWidget.updateAllWidgets(context, settings, currentItem.id)
+                                }
                             }
                         )
                         Row(
@@ -802,6 +822,7 @@ fun HomeScreen(
                             Destination.Wird -> 4
                             Destination.Settings -> 5
                             Destination.Audio -> 6
+                            Destination.Mushaf -> 7
                             else -> 0
                         },
                         animationSpec = tween(durationMillis = 180),
@@ -877,6 +898,14 @@ fun HomeScreen(
                                             ZekrGlanceWidget.updateAllWidgets(context, settings)
                                         }
                                     }
+                                },
+                                onRecordRead = { item ->
+                                    if (!isPreview) {
+                                        scope.launch {
+                                            prefRepo?.recordCompletedReadItem(item.type)
+                                            ZekrGlanceWidget.updateAllWidgets(context, settings, item.id)
+                                        }
+                                    }
                                 }
                             )
                             4 -> DailyWirdTabContent(
@@ -884,6 +913,7 @@ fun HomeScreen(
                                 allItems = allItems,
                                 openGuidedQuran = openGuidedQuran,
                                 onGuidedQuranOpened = { openGuidedQuran = false },
+                                onOpenMushaf = { destination = Destination.Mushaf },
                                 onUpdateDailyGoal = { newGoal ->
                                     if (!isPreview) {
                                         scope.launch {
@@ -893,6 +923,7 @@ fun HomeScreen(
                                 }
                             )
                             6 -> AudioWirdScreen(demoPlayback)
+                            7 -> MushafScreen(onBack = { destination = Destination.Wird })
                             5 -> SettingsContentTabContent(
                                 settings = settings,
                                 onUpdateSettings = { updateAndSync(it) },
@@ -1907,153 +1938,14 @@ fun SettingsContentTabContent(
                     Spacer(modifier = Modifier.height(14.dp))
                 }
 
-                // 1. Salawat
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                // 1. Direct Reading Notifications (إشعارات القراءة المباشرة)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                        .padding(14.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "الصلاة على النبي ﷺ",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "«هل صليت على النبي اليوم؟ اللهم صلّ وسلم على نبينا محمد»",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = notifSettings.salawatEnabled,
-                        onCheckedChange = {
-                            if (it && !hasNotificationPermission) {
-                                onRequestNotificationPermission()
-                            }
-                            onUpdateNotifSettings(notifSettings.copy(salawatEnabled = it))
-                        }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 2. Tasbeeh
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "تذكير التسبيح اليومي",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "«هل سبّحت اليوم؟ سبحان الله وبحمده، ألا بذكر الله تطمئن القلوب»",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = notifSettings.tasbeehEnabled,
-                        onCheckedChange = {
-                            if (it && !hasNotificationPermission) {
-                                onRequestNotificationPermission()
-                            }
-                            onUpdateNotifSettings(notifSettings.copy(tasbeehEnabled = it))
-                        }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 3. Wird
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "تذكير الورد القرآني",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "«هل قرأت وردك اليوم؟ رتّل وارتقِ بآيات الذكر الحكيم»",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = notifSettings.wirdEnabled,
-                        onCheckedChange = {
-                            if (it && !hasNotificationPermission) {
-                                onRequestNotificationPermission()
-                            }
-                            onUpdateNotifSettings(notifSettings.copy(wirdEnabled = it))
-                        }
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("تذكير بالدعاء")
-                    Switch(
-                        checked = notifSettings.duaEnabled,
-                        onCheckedChange = { onUpdateNotifSettings(notifSettings.copy(duaEnabled = it)) }
-                    )
-                }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("تذكيرات آيات وأحاديث وأذكار")
-                    Switch(
-                        checked = notifSettings.contentEnabled,
-                        onCheckedChange = { onUpdateNotifSettings(notifSettings.copy(contentEnabled = it)) }
-                    )
-                }
-                val anyNotifActive = notifSettings.salawatEnabled || notifSettings.tasbeehEnabled ||
-                    notifSettings.wirdEnabled || notifSettings.duaEnabled || notifSettings.contentEnabled
-                if (anyNotifActive) {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "التكرار اليومي للتذكيرات",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "${notifSettings.dailyCount} ${if (notifSettings.dailyCount in 3..10) "مرات" else "مرة"} يومياً",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Slider(
-                        value = notifSettings.dailyCount.toFloat().coerceIn(1f, 20f),
-                        onValueChange = {
-                            onUpdateNotifSettings(notifSettings.copy(dailyCount = it.toInt().coerceIn(1, 20)))
-                        },
-                        valueRange = 1f..20f,
-                        steps = 18
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -2061,13 +1953,333 @@ fun SettingsContentTabContent(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "ساعات الهدوء (11 م - 7 ص)",
+                                text = "📖 إشعارات القراءة المباشرة",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "عرض الآية أو الحديث كاملاً في الإشعار مع زر «تم» لاحتسابه في الورد اليومي دون فتح التطبيق",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = notifSettings.readingEnabled,
+                            onCheckedChange = {
+                                if (it && !hasNotificationPermission) {
+                                    onRequestNotificationPermission()
+                                }
+                                onUpdateNotifSettings(notifSettings.copy(readingEnabled = it))
+                            }
+                        )
+                    }
+
+                    if (notifSettings.readingEnabled) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "أقسام المحتوى للقراءة المباشرة:",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = notifSettings.readingQuranEnabled,
+                                onClick = {
+                                    val canToggle = !notifSettings.readingQuranEnabled || notifSettings.readingHadithEnabled || notifSettings.readingAthkarEnabled
+                                    if (canToggle) onUpdateNotifSettings(notifSettings.copy(readingQuranEnabled = !notifSettings.readingQuranEnabled))
+                                },
+                                label = { Text("القرآن الكريم") }
+                            )
+                            FilterChip(
+                                selected = notifSettings.readingHadithEnabled,
+                                onClick = {
+                                    val canToggle = !notifSettings.readingHadithEnabled || notifSettings.readingQuranEnabled || notifSettings.readingAthkarEnabled
+                                    if (canToggle) onUpdateNotifSettings(notifSettings.copy(readingHadithEnabled = !notifSettings.readingHadithEnabled))
+                                },
+                                label = { Text("الحديث النبوي") }
+                            )
+                            FilterChip(
+                                selected = notifSettings.readingAthkarEnabled,
+                                onClick = {
+                                    val canToggle = !notifSettings.readingAthkarEnabled || notifSettings.readingQuranEnabled || notifSettings.readingHadithEnabled
+                                    if (canToggle) onUpdateNotifSettings(notifSettings.copy(readingAthkarEnabled = !notifSettings.readingAthkarEnabled))
+                                },
+                                label = { Text("الأذكار المأثورة") }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "معدل القراءة اليومي",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "${notifSettings.readingDailyCount} مرات يومياً",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Slider(
+                            value = notifSettings.readingDailyCount.toFloat().coerceIn(1f, 20f),
+                            onValueChange = {
+                                onUpdateNotifSettings(notifSettings.copy(readingDailyCount = it.toInt().coerceIn(1, 20)))
+                            },
+                            valueRange = 1f..20f,
+                            steps = 18
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 2. Follow-up Reminders (تذكيرات المتابعة)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                        .padding(14.dp)
+                ) {
+                    Text(
+                        text = "⏱️ تذكيرات المتابعة والورد",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "تذكيرات تحفيزية للورد والتسبيح والصلاة على النبي ﷺ تفتح وجهتها داخل التطبيق",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "الصلاة على النبي ﷺ", fontWeight = FontWeight.Medium)
+                        Switch(
+                            checked = notifSettings.salawatEnabled,
+                            onCheckedChange = {
+                                if (it && !hasNotificationPermission) onRequestNotificationPermission()
+                                onUpdateNotifSettings(notifSettings.copy(salawatEnabled = it))
+                            }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "تذكير التسبيح اليومي", fontWeight = FontWeight.Medium)
+                        Switch(
+                            checked = notifSettings.tasbeehEnabled,
+                            onCheckedChange = {
+                                if (it && !hasNotificationPermission) onRequestNotificationPermission()
+                                onUpdateNotifSettings(notifSettings.copy(tasbeehEnabled = it))
+                            }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "تذكير الورد القرآني", fontWeight = FontWeight.Medium)
+                        Switch(
+                            checked = notifSettings.wirdEnabled,
+                            onCheckedChange = {
+                                if (it && !hasNotificationPermission) onRequestNotificationPermission()
+                                onUpdateNotifSettings(notifSettings.copy(wirdEnabled = it))
+                            }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "تذكير بالدعاء المأثور", fontWeight = FontWeight.Medium)
+                        Switch(
+                            checked = notifSettings.duaEnabled,
+                            onCheckedChange = {
+                                if (it && !hasNotificationPermission) onRequestNotificationPermission()
+                                onUpdateNotifSettings(notifSettings.copy(duaEnabled = it))
+                            }
+                        )
+                    }
+
+                    val anyReminderActive = notifSettings.salawatEnabled || notifSettings.tasbeehEnabled ||
+                        notifSettings.wirdEnabled || notifSettings.duaEnabled
+                    if (anyReminderActive) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "التكرار اليومي للتذكيرات",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "${notifSettings.remindersDailyCount} مرات يومياً",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Slider(
+                            value = notifSettings.remindersDailyCount.toFloat().coerceIn(1f, 10f),
+                            onValueChange = {
+                                onUpdateNotifSettings(notifSettings.copy(remindersDailyCount = it.toInt().coerceIn(1, 10), dailyCount = it.toInt().coerceIn(1, 10)))
+                            },
+                            valueRange = 1f..10f,
+                            steps = 8
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 3. Continuous Lock Screen Athkar (أذكار شاشة القفل الدائمة)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                        .padding(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "🔒 أذكار الشاشة الدائمة (شاشة القفل)",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "إشعار مستمر وصامت يتبدّل بانتظام على شاشة القفل للتذكير الدائم بذكر الله",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = notifSettings.lockScreenEnabled,
+                            onCheckedChange = {
+                                if (it && !hasNotificationPermission) {
+                                    onRequestNotificationPermission()
+                                }
+                                onUpdateNotifSettings(notifSettings.copy(lockScreenEnabled = it))
+                            }
+                        )
+                    }
+
+                    if (notifSettings.lockScreenEnabled) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "فترة تبديل الذكر على شاشة القفل:",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(15, 30, 60).forEach { mins ->
+                                FilterChip(
+                                    selected = notifSettings.lockScreenIntervalMinutes == mins,
+                                    onClick = {
+                                        onUpdateNotifSettings(notifSettings.copy(lockScreenIntervalMinutes = mins))
+                                    },
+                                    label = { Text("$mins دقيقة") }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "محتوى شاشة القفل:",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = notifSettings.lockScreenQuranEnabled,
+                                onClick = {
+                                    val canToggle = !notifSettings.lockScreenQuranEnabled || notifSettings.lockScreenHadithEnabled || notifSettings.lockScreenAthkarEnabled
+                                    if (canToggle) onUpdateNotifSettings(notifSettings.copy(lockScreenQuranEnabled = !notifSettings.lockScreenQuranEnabled))
+                                },
+                                label = { Text("آيات") }
+                            )
+                            FilterChip(
+                                selected = notifSettings.lockScreenHadithEnabled,
+                                onClick = {
+                                    val canToggle = !notifSettings.lockScreenHadithEnabled || notifSettings.lockScreenQuranEnabled || notifSettings.lockScreenAthkarEnabled
+                                    if (canToggle) onUpdateNotifSettings(notifSettings.copy(lockScreenHadithEnabled = !notifSettings.lockScreenHadithEnabled))
+                                },
+                                label = { Text("أحاديث") }
+                            )
+                            FilterChip(
+                                selected = notifSettings.lockScreenAthkarEnabled,
+                                onClick = {
+                                    val canToggle = !notifSettings.lockScreenAthkarEnabled || notifSettings.lockScreenQuranEnabled || notifSettings.lockScreenHadithEnabled
+                                    if (canToggle) onUpdateNotifSettings(notifSettings.copy(lockScreenAthkarEnabled = !notifSettings.lockScreenAthkarEnabled))
+                                },
+                                label = { Text("أذكار") }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 4. Quiet Hours & DND Notice
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                        .padding(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "🌙 ساعات الهدوء (11 م - 7 ص)",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "إيقاف التنبيهات تلقائياً أثناء ساعات النوم والراحة",
+                                text = "إيقاف التنبيهات تلقائياً أثناء ساعات الراحة والنوم",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -2080,30 +2292,38 @@ fun SettingsContentTabContent(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "ℹ️ جميع إشعارات التطبيق صامتة وهادئة بطبيعتها وتحترم وضع عدم الإزعاج (Do Not Disturb) في نظام أندرويد دون تشويش أو صوت مفاجئ.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        lineHeight = 18.sp
+                    )
+                }
 
-                    var showReminderTypes by remember { mutableStateOf(false) }
-                    Box {
-                        OutlinedButton(
-                            onClick = { showReminderTypes = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("تجربة إشعار")
-                        }
-                        DropdownMenu(
-                            expanded = showReminderTypes,
-                            onDismissRequest = { showReminderTypes = false }
-                        ) {
-                            ReminderType.entries.forEach { type ->
-                                val label = type.titleArabic
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        showReminderTypes = false
-                                        onTestReminder(type)
-                                    }
-                                )
-                            }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                var showReminderTypes by remember { mutableStateOf(false) }
+                Box {
+                    OutlinedButton(
+                        onClick = { showReminderTypes = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("تجربة إرسال إشعار")
+                    }
+                    DropdownMenu(
+                        expanded = showReminderTypes,
+                        onDismissRequest = { showReminderTypes = false }
+                    ) {
+                        ReminderType.entries.forEach { type ->
+                            val label = type.titleArabic
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    showReminderTypes = false
+                                    onTestReminder(type)
+                                }
+                            )
                         }
                     }
                 }
@@ -2666,17 +2886,8 @@ fun LiveGlassWidgetPreview(
 ) {
     val context = LocalContext.current
 
-    var previewModeIndex by rememberSaveable { mutableIntStateOf(1) } // 0: Compact, 1: Medium, 2: Expanded
-    val previewHeight = when (previewModeIndex) {
-        0 -> 108.dp
-        2 -> 270.dp
-        else -> 216.dp
-    }
-    val previewBitmapH = when (previewModeIndex) {
-        0 -> 190
-        2 -> 500
-        else -> 380
-    }
+    val previewHeight = 216.dp
+    val previewBitmapH = 380
 
     val bitmap: Bitmap = remember(
         settings.colorPreset,
@@ -2688,8 +2899,7 @@ fun LiveGlassWidgetPreview(
         settings.blurGrade,
         settings.pattern,
         settings.patternOpacity,
-        settings.patternScale,
-        previewModeIndex
+        settings.patternScale
     ) {
         GlassRenderer.createGlassBackgroundBitmap(
             width = 680,
@@ -2722,23 +2932,6 @@ fun LiveGlassWidgetPreview(
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 6.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            listOf("شريط (Compact)", "متوسط (Medium)", "موسع (Expanded)").forEachIndexed { idx, label ->
-                FilterChip(
-                    selected = previewModeIndex == idx,
-                    onClick = { previewModeIndex = idx },
-                    label = { Text(label, fontSize = 11.5.sp) },
-                    modifier = Modifier.padding(horizontal = 3.dp)
-                )
-            }
-        }
-
         // Phone Home Screen Wallpaper Container (the backdrop behind the widget)
         Box(
             modifier = Modifier
@@ -2770,7 +2963,6 @@ fun LiveGlassWidgetPreview(
                         noiseFactor = (settings.blurGrade * 0.10f).coerceAtLeast(0f)
                     )
                 )
-                .bouncyClickable { onBodyTap() }
         ) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
@@ -2913,51 +3105,44 @@ fun LiveGlassWidgetPreview(
                     }
                 }
 
-                var showMenu by remember { mutableStateOf(false) }
-                var showDetails by remember { mutableStateOf(false) }
-                if (showDetails) {
-                    AlertDialog(
-                        onDismissRequest = { showDetails = false },
-                        title = { Text("تفاصيل الذكر") },
-                        text = {
-                            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                                Text(currentItem.getFormattedArabicText())
-                                Text(currentItem.getConciseCitation(), modifier = Modifier.padding(top = 8.dp))
-                            }
-                        },
-                        confirmButton = { TextButton(onClick = { showDetails = false }) { Text("إغلاق") } }
-                    )
-                }
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Outlined.Menu, contentDescription = "قائمة الذكر", tint = animatedTextColor)
+                    // Visual dummy buttons replicating real widget
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(animatedTextColor.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.Menu,
+                                contentDescription = null,
+                                tint = animatedTextColor,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("عرض النص الكامل") },
-                                onClick = { showMenu = false; showDetails = true }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (isFavorite) "إزالة من المفضلة" else "إضافة إلى المفضلة") },
-                                onClick = { showMenu = false; onToggleFavorite() }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("مشاركة الذكر") },
-                                onClick = { showMenu = false; onShare() }
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(targetAccentColor.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(com.zekr.widget.R.drawable.ic_werd_reminder),
+                                contentDescription = null,
+                                tint = targetAccentColor,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                    }
-                    IconButton(onClick = onOpenTasbeeh) {
-                        Icon(
-                            painter = painterResource(com.zekr.widget.R.drawable.ic_werd_reminder),
-                            contentDescription = "افتح السبحة",
-                            tint = targetAccentColor
-                        )
                     }
 
                     Text(
@@ -2972,6 +3157,21 @@ fun LiveGlassWidgetPreview(
                             .weight(1f)
                             .padding(horizontal = 8.dp)
                     )
+
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(animatedTextColor.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(com.zekr.widget.R.drawable.ic_werd_logo),
+                            contentDescription = null,
+                            tint = animatedTextColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }

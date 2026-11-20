@@ -22,6 +22,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+enum class QuranPlayScope(val titleArabic: String) {
+    SINGLE_SURAH("سورة واحدة"),
+    CONTINUOUS_TO_END("حتى نهاية المصحف")
+}
+
 data class PlayerUiState(
     val currentTrack: AudioTrack? = null,
     val isPlaying: Boolean = false,
@@ -33,9 +38,11 @@ data class PlayerUiState(
     val durationMs: Long = 0L,
     val playbackSpeed: Float = 1.0f,
     val isRepeating: Boolean = false,
+    val isSessionActive: Boolean = false,
     val sleepTimerEndRealtimeMs: Long = 0L,
     val sleepTimerRemainingSeconds: Long = 0L,
-    val selectedReciter: AudioCatalog.QuranReciter = AudioCatalog.QuranReciter.MINSHAWI
+    val selectedReciter: AudioCatalog.QuranReciter = AudioCatalog.QuranReciter.MINSHAWI,
+    val quranPlayScope: QuranPlayScope = QuranPlayScope.SINGLE_SURAH
 )
 
 object WerdAudioPlayerManager {
@@ -66,12 +73,17 @@ object WerdAudioPlayerManager {
             ?: AudioCatalog.getQuranTracks(reciter).firstOrNull()
 
         val savedPosition = prefs?.getLong("last_position_ms", 0L) ?: 0L
+        val savedScopeName = prefs?.getString("quran_scope", QuranPlayScope.SINGLE_SURAH.name)
+        val savedScope = QuranPlayScope.entries.firstOrNull { it.name == savedScopeName }
+            ?: QuranPlayScope.SINGLE_SURAH
 
         _state.update {
             it.copy(
                 selectedReciter = reciter,
                 currentTrack = restoredTrack,
-                currentPositionMs = savedPosition
+                currentPositionMs = savedPosition,
+                quranPlayScope = savedScope,
+                isSessionActive = false
             )
         }
 
@@ -96,7 +108,12 @@ object WerdAudioPlayerManager {
     private fun setupPlayerListener(player: Player) {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                _state.update { it.copy(isPlaying = isPlaying) }
+                _state.update {
+                    it.copy(
+                        isPlaying = isPlaying,
+                        isSessionActive = if (isPlaying) true else it.isSessionActive
+                    )
+                }
                 if (isPlaying) {
                     startProgressTracker()
                 } else {
@@ -117,8 +134,16 @@ object WerdAudioPlayerManager {
                     )
                 }
                 if (playbackState == Player.STATE_ENDED) {
-                    _state.update { it.copy(isPlaying = false, currentPositionMs = 0L) }
-                    persistState()
+                    if (_state.value.isRepeating) {
+                        // Media3 handles repeating
+                    } else if (_state.value.quranPlayScope == QuranPlayScope.CONTINUOUS_TO_END &&
+                        _state.value.currentTrack?.surahNumber != null &&
+                        _state.value.currentTrack?.surahNumber!! < 114
+                    ) {
+                        playNext()
+                    } else {
+                        stopPlayback()
+                    }
                 }
             }
 
@@ -150,8 +175,8 @@ object WerdAudioPlayerManager {
         val isPlaying = player.isPlaying
         val duration = if (player.duration > 0) player.duration else 0L
         val position = player.currentPosition.coerceAtLeast(0L)
-        val speed = player.playbackParameters.speed
         val repeat = player.repeatMode == Player.REPEAT_MODE_ONE
+        val hasActiveMedia = player.currentMediaItem != null && (isPlaying || player.playbackState == Player.STATE_READY)
 
         _state.update {
             it.copy(
@@ -161,8 +186,9 @@ object WerdAudioPlayerManager {
                 isLoading = player.playbackState == Player.STATE_BUFFERING,
                 durationMs = duration,
                 currentPositionMs = position,
-                playbackSpeed = speed,
-                isRepeating = repeat
+                playbackSpeed = 1.0f,
+                isRepeating = repeat,
+                isSessionActive = hasActiveMedia || it.isSessionActive
             )
         }
 
@@ -192,7 +218,8 @@ object WerdAudioPlayerManager {
                 currentTrack = track,
                 isLoading = true,
                 isError = false,
-                errorMessage = null
+                errorMessage = null,
+                isSessionActive = true
             )
         }
 
@@ -220,6 +247,7 @@ object WerdAudioPlayerManager {
         if (c.isPlaying) {
             c.pause()
         } else {
+            _state.update { it.copy(isSessionActive = true) }
             if (c.playbackState == Player.STATE_IDLE || c.currentMediaItem == null) {
                 val track = _state.value.currentTrack ?: return
                 playTrack(track)
@@ -229,22 +257,25 @@ object WerdAudioPlayerManager {
         }
     }
 
+    fun stopPlayback() {
+        progressJob?.cancel()
+        sleepTimerJob?.cancel()
+        controller?.stop()
+        controller?.clearMediaItems()
+        _state.update {
+            it.copy(
+                isPlaying = false,
+                isSessionActive = false,
+                sleepTimerEndRealtimeMs = 0L,
+                sleepTimerRemainingSeconds = 0L
+            )
+        }
+    }
+
     fun seekTo(positionMs: Long) {
         val c = controller ?: return
         c.seekTo(positionMs)
         _state.update { it.copy(currentPositionMs = positionMs) }
-    }
-
-    fun cycleSpeed() {
-        val c = controller ?: return
-        val currentSpeed = _state.value.playbackSpeed
-        val newSpeed = when (currentSpeed) {
-            1.0f -> 1.25f
-            1.25f -> 1.5f
-            else -> 1.0f
-        }
-        c.setPlaybackSpeed(newSpeed)
-        _state.update { it.copy(playbackSpeed = newSpeed) }
     }
 
     fun toggleRepeat() {
@@ -255,29 +286,36 @@ object WerdAudioPlayerManager {
         _state.update { it.copy(isRepeating = !isRepeating) }
     }
 
-    fun toggleSleepTimer() {
-        val currentEnd = _state.value.sleepTimerEndRealtimeMs
-        if (currentEnd > 0L) {
-            sleepTimerJob?.cancel()
+    fun setSleepTimerMinutes(minutes: Int) {
+        sleepTimerJob?.cancel()
+        if (minutes <= 0) {
             _state.update { it.copy(sleepTimerEndRealtimeMs = 0L, sleepTimerRemainingSeconds = 0L) }
-        } else {
-            val durationMs = 15 * 60 * 1000L
-            val endMs = SystemClock.elapsedRealtime() + durationMs
-            _state.update { it.copy(sleepTimerEndRealtimeMs = endMs, sleepTimerRemainingSeconds = 15 * 60L) }
-            sleepTimerJob?.cancel()
-            sleepTimerJob = scope.launch {
-                while (true) {
-                    val remaining = (endMs - SystemClock.elapsedRealtime()) / 1000L
-                    if (remaining <= 0L) {
-                        _state.update { it.copy(sleepTimerEndRealtimeMs = 0L, sleepTimerRemainingSeconds = 0L) }
-                        controller?.pause()
-                        break
-                    }
-                    _state.update { it.copy(sleepTimerRemainingSeconds = remaining) }
-                    delay(1000)
+            return
+        }
+        val durationMs = minutes * 60 * 1000L
+        val endMs = SystemClock.elapsedRealtime() + durationMs
+        _state.update { it.copy(sleepTimerEndRealtimeMs = endMs, sleepTimerRemainingSeconds = minutes * 60L) }
+        sleepTimerJob = scope.launch {
+            while (true) {
+                val remaining = (endMs - SystemClock.elapsedRealtime()) / 1000L
+                if (remaining <= 0L) {
+                    _state.update { it.copy(sleepTimerEndRealtimeMs = 0L, sleepTimerRemainingSeconds = 0L) }
+                    stopPlayback()
+                    break
                 }
+                _state.update { it.copy(sleepTimerRemainingSeconds = remaining) }
+                delay(1000)
             }
         }
+    }
+
+    fun cancelSleepTimer() {
+        setSleepTimerMinutes(0)
+    }
+
+    fun setQuranPlayScope(scope: QuranPlayScope) {
+        _state.update { it.copy(quranPlayScope = scope) }
+        prefs?.edit()?.putString("quran_scope", scope.name)?.apply()
     }
 
     fun setReciter(reciter: AudioCatalog.QuranReciter) {

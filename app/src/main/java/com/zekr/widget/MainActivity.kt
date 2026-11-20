@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_NAV_TAB = "extra_nav_tab"
         const val NAV_GUIDED_QURAN = 6
+        const val NAV_MUSHAF = 7
     }
 
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID

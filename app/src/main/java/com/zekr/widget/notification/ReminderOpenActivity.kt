@@ -28,7 +28,7 @@ class ReminderOpenActivity : Activity() {
         val notificationId = NotificationHelper.reminderId(type)
         val target = when (type) {
             ReminderType.WIRD -> Intent(this, MainActivity::class.java)
-                .putExtra(MainActivity.EXTRA_NAV_TAB, MainActivity.NAV_GUIDED_QURAN)
+                .putExtra(MainActivity.EXTRA_NAV_TAB, MainActivity.NAV_MUSHAF)
             ReminderType.SALAWAT, ReminderType.TASBEEH -> {
                 if (Settings.canDrawOverlays(this)) {
                     val overlay = Intent(this, FloatingTasbeehService::class.java)

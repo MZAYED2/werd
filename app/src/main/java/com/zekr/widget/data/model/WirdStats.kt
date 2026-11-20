@@ -96,6 +96,35 @@ data class WirdStats(
         return updated.copy(bestStreak = maxOf(bestStreak, streakNow))
     }
 
+    fun withRecordedCompletion(
+        itemType: ContentType,
+        count: Int = 1,
+        today: LocalDate = LocalDate.now()
+    ): WirdStats {
+        val todayKey = formatDate(today)
+        val existing = records[todayKey] ?: DailyWirdRecord(date = todayKey)
+        val updatedToday = existing.copy(
+            completedCount = existing.completedCount + count,
+            quranCompleted = existing.quranCompleted + if (itemType == ContentType.QURAN_AYAH) count else 0,
+            hadithCompleted = existing.hadithCompleted + if (itemType == ContentType.SAHIH_HADITH) count else 0,
+            azkarCompleted = existing.azkarCompleted + if (itemType == ContentType.AUTHENTIC_ZEKR) count else 0
+        )
+
+        val cutoff = today.minusDays(60)
+        val pruned = records
+            .filterKeys { key ->
+                runCatching { LocalDate.parse(key, DATE_FORMATTER) }
+                    .getOrNull()
+                    ?.let { !it.isBefore(cutoff) } ?: false
+            }
+            .toMutableMap()
+        pruned[todayKey] = updatedToday
+
+        val updated = copy(records = pruned)
+        val streakNow = updated.currentStreak(today)
+        return updated.copy(bestStreak = maxOf(bestStreak, streakNow))
+    }
+
     fun withUndoneTap(
         itemType: ContentType,
         uncompletedItem: Boolean = false,

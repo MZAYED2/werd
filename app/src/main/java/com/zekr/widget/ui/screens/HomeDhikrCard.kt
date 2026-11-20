@@ -8,10 +8,11 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,7 +27,8 @@ internal fun HomeDhikrCard(
     favorite: Boolean,
     onNext: () -> Unit,
     onFavorite: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onRecordRead: (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -49,6 +51,29 @@ internal fun HomeDhikrCard(
                     color = sourceTextColor,
                     textAlign = TextAlign.Center
                 )
+            }
+            if (onRecordRead != null) {
+                var isReadRecorded by remember(item.id) { mutableStateOf(false) }
+                FilledTonalButton(
+                    onClick = {
+                        if (!isReadRecorded) {
+                            isReadRecorded = true
+                            onRecordRead()
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (isReadRecorded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                        contentColor = if (isReadRecorded) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(38.dp)
+                ) {
+                    Text(
+                        if (isReadRecorded) "تقبل الله · تم تسجيل القراءة ✓" else "تمت القراءة ✓",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onFavorite) {
