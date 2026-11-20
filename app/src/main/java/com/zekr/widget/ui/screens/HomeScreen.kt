@@ -82,6 +82,7 @@ import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Favorite
@@ -153,6 +154,7 @@ fun HomeScreen(
     val customItems by (prefRepo?.customItemsFlow ?: remember { flowOf(emptyList()) }).collectAsState(initial = emptyList())
     val wirdStats by (prefRepo?.wirdStatsFlow ?: remember { flowOf(WirdStats()) }).collectAsState(initial = WirdStats())
     val notifSettings by (prefRepo?.notificationSettingsFlow ?: remember { flowOf(com.zekr.widget.data.preferences.NotificationSettings()) }).collectAsState(initial = com.zekr.widget.data.preferences.NotificationSettings())
+    val isSimpleMode by (prefRepo?.simpleModeFlow ?: remember { flowOf(false) }).collectAsState(initial = false)
     val hasPromptedPermissions by (prefRepo?.hasPromptedPermissionsFlow ?: remember { flowOf(true) }).collectAsState(initial = true)
     var showPermissionsIntro by remember { mutableStateOf(false) }
 
@@ -286,7 +288,7 @@ fun HomeScreen(
     }
     var openGuidedQuran by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(initialTab) {
-        if (!isWidgetConfigMode) {
+        if (!isWidgetConfigMode && initialTab >= 0) {
             when (initialTab) {
                 0 -> destination = Destination.Home
                 1 -> destination = Destination.Library
@@ -302,7 +304,7 @@ fun HomeScreen(
                     destination = Destination.Mushaf
                 }
             }
-            if (initialTab in 1..com.zekr.widget.MainActivity.NAV_MUSHAF) onInitialTabHandled()
+            onInitialTabHandled()
         }
     }
     var settingsOrigin by rememberSaveable { mutableStateOf(Destination.Home) }
@@ -457,11 +459,44 @@ fun HomeScreen(
                                     Text("تم وحفظ ✓", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
                                 }
                             } else if (destination != Destination.Settings) {
-                                IconButton(onClick = {
-                                    settingsOrigin = destination
-                                    destination = Destination.Settings
-                                }) {
-                                    Icon(Icons.Outlined.Settings, contentDescription = "الإعدادات")
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (destination == Destination.Home) {
+                                        FilterChip(
+                                            selected = isSimpleMode,
+                                            onClick = {
+                                                scope.launch {
+                                                    val next = !isSimpleMode
+                                                    prefRepo?.saveSimpleMode(next)
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        if (next) "تم تفعيل الوضع المبسط · الأساسيات فقط 🌿" else "تم العودة للوضع الشامل ✨",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            },
+                                            leadingIcon = {
+                                                Text(if (isSimpleMode) "🌿" else "✨", fontSize = 11.sp)
+                                            },
+                                            label = {
+                                                Text(
+                                                    if (isSimpleMode) "الوضع المبسط" else "مبسط",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            ),
+                                            modifier = Modifier.padding(end = 4.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        settingsOrigin = destination
+                                        destination = Destination.Settings
+                                    }) {
+                                        Icon(Icons.Outlined.Settings, contentDescription = "الإعدادات")
+                                    }
                                 }
                             }
                         },
@@ -472,20 +507,29 @@ fun HomeScreen(
                 }
             },
             bottomBar = {
-                if (!isWidgetConfigMode && destination != Destination.Mushaf) {
+                if (!isWidgetConfigMode) {
                     Column {
                         if (destination != Destination.Audio && demoPlayback?.engaged == true) {
                             AudioMiniPlayer(demoPlayback) { destination = Destination.Audio }
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                            listOf(
-                                Destination.Home,
-                                Destination.Library,
-                                Destination.Tasbeeh,
-                                Destination.Mushaf,
-                                Destination.Audio,
-                                Destination.Wird
-                            ).forEach { section ->
+                            val activeSections = if (isSimpleMode) {
+                                listOf(
+                                    Destination.Home,
+                                    Destination.Tasbeeh,
+                                    Destination.Studio
+                                )
+                            } else {
+                                listOf(
+                                    Destination.Home,
+                                    Destination.Library,
+                                    Destination.Tasbeeh,
+                                    Destination.Mushaf,
+                                    Destination.Audio,
+                                    Destination.Wird
+                                )
+                            }
+                            activeSections.forEach { section ->
                                 NavigationBarItem(
                                     selected = destination == section,
                                     onClick = { destination = section },
@@ -493,15 +537,21 @@ fun HomeScreen(
                                         val iconSize = Modifier.size(28.dp)
                                         when (section) {
                                             Destination.Home -> Icon(Icons.Outlined.Home, null, iconSize)
-                                            Destination.Library -> Icon(Icons.Outlined.List, null, iconSize)
+                                            Destination.Library -> Icon(Icons.AutoMirrored.Outlined.List, null, iconSize)
                                             Destination.Mushaf -> Text("📖", fontSize = 20.sp)
                                             Destination.Audio -> Icon(Icons.Outlined.PlayArrow, null, iconSize)
                                             Destination.Wird -> Icon(Icons.Outlined.DateRange, null, iconSize)
+                                            Destination.Studio -> Text("🪟", fontSize = 20.sp)
                                             else -> TasbeehNavIcon(28.dp)
                                         }
                                     },
                                     label = {
-                                        Text(section.title, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                        val labelText = when {
+                                            isSimpleMode && section == Destination.Home -> "الأذكار"
+                                            isSimpleMode && section == Destination.Studio -> "الويدجت"
+                                            else -> section.title
+                                        }
+                                        Text(labelText, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                                     }
                                 )
                             }
@@ -708,104 +758,215 @@ fun HomeScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        ModernSectionCard(title = "وِردك اليوم") {
-                            Text(
-                                text = "${ZekrRepository.toArabicDigits(completed)} من ${ZekrRepository.toArabicDigits(goal)} منجز اليوم",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.5.sp
-                            )
-                            LinearProgressIndicator(
-                                progress = { (completed.toFloat() / goal).coerceIn(0f, 1f) },
+                        if (isSimpleMode) {
+                            // Simple Mode Banner
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text("🌿", fontSize = 14.sp)
+                                        Text(
+                                            text = "الوضع المبسط (الأساسيات فقط)",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.5.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = { scope.launch { prefRepo?.saveSimpleMode(false) } },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("التبديل للشامل", fontSize = 11.5.sp)
+                                    }
+                                }
+                            }
+
+                            // Big Clear Tasbeeh Card in Simple Mode
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 10.dp)
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (streak > 0) "التتابع الحالي: ${ZekrRepository.toArabicDigits(streak)} أيام 🔥" else "ابدأ تتابعك اليومي",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                TextButton(onClick = { destination = Destination.Wird }) {
-                                    Text("عرض تفاصيل الورد")
-                                }
-                            }
-                        }
-
-                        // Quick Navigation & Snapshot Card
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Card(
-                                modifier = Modifier
-                                    .weight(1f)
                                     .clickable { destination = Destination.Tasbeeh },
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface
-                                ),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                Row(
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "السبحة",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        text = "${ZekrRepository.toArabicDigits(todayRec.totalTasbihTaps)} تسبيحة",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 14.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "انقر للمتابعة",
-                                        fontSize = 10.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        TasbeehNavIcon(36.dp)
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("السبحة والعداد", fontWeight = FontWeight.Bold, fontSize = 14.5.sp)
+                                            Text(
+                                                text = "${ZekrRepository.toArabicDigits(todayRec.totalTasbihTaps)} تسبيحة اليوم",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Button(
+                                        onClick = { destination = Destination.Tasbeeh },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("فتح السبحة", fontSize = 12.sp)
+                                    }
                                 }
                             }
 
+                            // Big Clear Widget Card in Simple Mode
                             Card(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { destination = Destination.Library },
+                                    .fillMaxWidth()
+                                    .clickable { destination = Destination.Studio },
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface
-                                ),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                Row(
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Text("🪟", fontSize = 28.sp)
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("ويدجت الشاشة الرئيسية", fontWeight = FontWeight.Bold, fontSize = 14.5.sp)
+                                            Text(
+                                                text = "تخصيص الألوان والخط والشفافية",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    OutlinedButton(
+                                        onClick = { destination = Destination.Studio },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("تخصيص", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        } else {
+                            ModernSectionCard(title = "وِردك اليوم") {
+                                Text(
+                                    text = "${ZekrRepository.toArabicDigits(completed)} من ${ZekrRepository.toArabicDigits(goal)} منجز اليوم",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.5.sp
+                                )
+                                LinearProgressIndicator(
+                                    progress = { (completed.toFloat() / goal).coerceIn(0f, 1f) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 10.dp)
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "المكتبة",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        text = "${ZekrRepository.toArabicDigits(allItems.size)} ذكراً وآية",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 14.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "تصفح وابحث",
-                                        fontSize = 10.5.sp,
+                                        text = if (streak > 0) "التتابع الحالي: ${ZekrRepository.toArabicDigits(streak)} أيام 🔥" else "ابدأ تتابعك اليومي",
+                                        fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    TextButton(onClick = { destination = Destination.Wird }) {
+                                        Text("عرض تفاصيل الورد")
+                                    }
+                                }
+                            }
+
+                            // Quick Navigation & Snapshot Card
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { destination = Destination.Tasbeeh },
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surface
+                                    ),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "السبحة",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "${ZekrRepository.toArabicDigits(todayRec.totalTasbihTaps)} تسبيحة",
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "انقر للمتابعة",
+                                            fontSize = 10.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { destination = Destination.Library },
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surface
+                                    ),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "المكتبة",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "${ZekrRepository.toArabicDigits(allItems.size)} ذكراً وآية",
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "تصفح وابحث",
+                                            fontSize = 10.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -932,6 +1093,14 @@ fun HomeScreen(
                                     if (!isPreview) {
                                         scope.launch {
                                             prefRepo?.saveNotificationSettings(newNotif)
+                                        }
+                                    }
+                                },
+                                isSimpleMode = isSimpleMode,
+                                onToggleSimpleMode = { enabled ->
+                                    if (!isPreview) {
+                                        scope.launch {
+                                            prefRepo?.saveSimpleMode(enabled)
                                         }
                                     }
                                 },
@@ -1869,6 +2038,8 @@ fun SettingsContentTabContent(
     onUpdateSettings: (WidgetSettings) -> Unit,
     notifSettings: com.zekr.widget.data.preferences.NotificationSettings = com.zekr.widget.data.preferences.NotificationSettings(),
     onUpdateNotifSettings: (com.zekr.widget.data.preferences.NotificationSettings) -> Unit = {},
+    isSimpleMode: Boolean = false,
+    onToggleSimpleMode: (Boolean) -> Unit = {},
     hasNotificationPermission: Boolean = true,
     onRequestNotificationPermission: () -> Unit = {},
     onOpenNotificationSettings: () -> Unit = {},
@@ -1886,6 +2057,35 @@ fun SettingsContentTabContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item { WerdAppearanceSettings() }
+        item {
+            ModernSectionCard(
+                title = "نمط الواجهة (الوضع المبسط)",
+                subtitle = "التبديل بين الواجهة الشاملة والواجهة المبسطة التي تضم الأساسيات فقط"
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = "الوضع المبسط (الأساسيات فقط)",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "يقتصر على الأذكار، السبحة، وتخصيص الويدجت بأيقونات واضحة وشرح مباشر لكل وظيفة وبدون أي تشتيت.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isSimpleMode,
+                        onCheckedChange = { onToggleSimpleMode(it) }
+                    )
+                }
+            }
+        }
         item {
             ModernSectionCard(
                 title = "التنبيهات والتذكيرات الذكية",

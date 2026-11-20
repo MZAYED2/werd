@@ -180,8 +180,15 @@ object MushafData {
     fun getPageHeaderInfo(page: Int): PageHeaderInfo {
         val safePage = page.coerceIn(1, TOTAL_PAGES)
 
-        // Surah on this page is the last Surah whose startPage <= safePage
-        val surah = SURAHS.lastOrNull { it.startPage <= safePage } ?: SURAHS.first()
+        val surahsStartingHere = SURAHS.filter { it.startPage == safePage }
+        val surahTitle = when {
+            surahsStartingHere.size > 1 -> "سورة " + surahsStartingHere.joinToString(" و ") { it.nameArabic }
+            surahsStartingHere.size == 1 -> "سورة ${surahsStartingHere.first().nameArabic}"
+            else -> {
+                val currentSurah = SURAHS.lastOrNull { it.startPage <= safePage } ?: SURAHS.first()
+                "سورة ${currentSurah.nameArabic}"
+            }
+        }
 
         // Juz on this page
         val juz = JUZ_LIST.lastOrNull { it.startPage <= safePage } ?: JUZ_LIST.first()
@@ -189,7 +196,7 @@ object MushafData {
         return PageHeaderInfo(
             pageNumber = safePage,
             pageNumberArabic = ZekrRepository.toArabicDigits(safePage),
-            surahName = "سورة ${surah.nameArabic}",
+            surahName = surahTitle,
             juzName = juz.nameArabic,
             juzNumber = juz.number
         )

@@ -5,12 +5,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.zekr.widget.audio.AudioCatalog
 import com.zekr.widget.audio.AudioTrack
 import com.zekr.widget.audio.WerdAudioPlayerManager
+import com.zekr.widget.routine.ui.RoutineListSection
 
 internal class DemoPlayback(
     val title: String,
@@ -86,6 +90,8 @@ internal fun AudioWirdScreen(playback: DemoPlayback?) {
     val state by WerdAudioPlayerManager.state.collectAsState()
     val activeTrack = state.currentTrack
     var quranSearchQuery by remember { mutableStateOf("") }
+    var athkarSearchQuery by remember { mutableStateOf("") }
+    var selectedAthkarCategory by remember { mutableStateOf("الكل") }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -159,6 +165,21 @@ internal fun AudioWirdScreen(playback: DemoPlayback?) {
                             style = MaterialTheme.typography.bodySmall
                         )
                     },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    trailingIcon = {
+                        if (quranSearchQuery.isNotEmpty()) {
+                            IconButton(onClick = { quranSearchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "مسح", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp)
@@ -204,11 +225,90 @@ internal fun AudioWirdScreen(playback: DemoPlayback?) {
 
         // Section 2: Authentic Human Athkar & Duas
         item {
+            val categories = remember {
+                listOf(
+                    "الكل",
+                    "أذكار اليوم والليلة",
+                    "أذكار الصلاة",
+                    "تفريج الكروب",
+                    "السفر والتنقل",
+                    "أدعية الأحوال",
+                    "الاستغفار والتسبيح",
+                    "الأدعية المأثورة"
+                )
+            }
+
+            val filteredAthkar = remember(athkarSearchQuery, selectedAthkarCategory) {
+                AudioCatalog.AthkarTracks.filter { track ->
+                    val matchesCategory = selectedAthkarCategory == "الكل" || track.category == selectedAthkarCategory
+                    val matchesQuery = athkarSearchQuery.isBlank() ||
+                            track.title.contains(athkarSearchQuery.trim()) ||
+                            track.subtitle.contains(athkarSearchQuery.trim())
+                    matchesCategory && matchesQuery
+                }
+            }
+
             ModernSectionCard(
                 title = "أذكار وأدعية الكتاب والسنة (بصوت بشري هادئ)",
                 subtitle = "بصوت الشيخ حمد الدريهم من دار الإسلام (IslamHouse.com) - حصن المسلم"
             ) {
-                AudioCatalog.AthkarTracks.forEach { track ->
+                // Search field for Athkar
+                OutlinedTextField(
+                    value = athkarSearchQuery,
+                    onValueChange = { athkarSearchQuery = it },
+                    placeholder = {
+                        Text(
+                            "ابحث في الأدعية والأذكار (مثال: الصباح، السفر، النوم، الاستخارة)...",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    trailingIcon = {
+                        if (athkarSearchQuery.isNotEmpty()) {
+                            IconButton(onClick = { athkarSearchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "مسح", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                // Category Chips
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(categories) { cat ->
+                        FilterChip(
+                            selected = selectedAthkarCategory == cat,
+                            onClick = { selectedAthkarCategory = cat },
+                            label = { Text(cat, fontSize = 12.sp) }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                Text(
+                    text = "عدد الأدعية المعروضة: ${filteredAthkar.size} من ${AudioCatalog.AthkarTracks.size} باباً محققاً",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(Modifier.height(6.dp))
+
+                filteredAthkar.forEach { track ->
                     val isCurrent = activeTrack?.id == track.id
                     TrackListItem(
                         track = track,
@@ -227,11 +327,11 @@ internal fun AudioWirdScreen(playback: DemoPlayback?) {
             }
         }
 
-        // Section 3: Remaining Collections (Verified status)
+        // Section 3: Verified Audio Library Status
         item {
             ModernSectionCard(
-                title = "مجموعات الأذكار والأدعية الأخرى",
-                subtitle = "حالة التوثيق والتحقق الصوتي"
+                title = "موسوعة الأذكار والأدعية المحققة",
+                subtitle = "توثيق التسميات والمطابقة الصوتية الشاملة"
             ) {
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -244,19 +344,24 @@ internal fun AudioWirdScreen(playback: DemoPlayback?) {
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            "تم توفير ١٢ باباً رئيساً محققاً بصوت الشيخ حمد الدريهم من حصن المسلم (الاستيقاظ، الصباح والمساء، النوم، دبر الصلاة، الاستغفار، الصلاة على النبي ﷺ، التسبيح، السفر، دخول وخروج المنزل، الاستخارة، والهم والكرب).",
+                            "تم تدقيق وتصحيح مطابقة كافة الملفات الصوتية بنسبة ١٠٠٪؛ بحيث يتطابق عنوان كل دعاء مع محتواه الصوتي المسموع بصوت الشيخ حمد الدريهم من كتاب حصن المسلم.",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            "الأبواب التخصصية المتبقية (الرقية المطولة، تفاصيل مناسك الحج، والأدعية النادرة) ما زالت قيد المراجعة والتحقق الصوتي لضمان خلوها من أي مؤثرات وتوثيق تراخيصها الشرعية، وستُضاف تباعاً بإذن الله.",
+                            "تشمل المكتبة الصوتية الآن ٣٣ باباً رئيسياً تشمل أذكار الصباح والمساء، أذكار النوم، الاستيقاظ، صلاة الاستخارة، أذكار ما بعد الصلاة، تفريج الهموم والكروب، قضاء الدين، السفر، الاستغفار، الصلاة على النبي ﷺ، والتسبيح.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
+        }
+
+        // Section 4: Smart Audio Routine Builder (روتيناتي الصوتية - في نهاية قسم الصوتيات)
+        item {
+            RoutineListSection()
         }
     }
 }

@@ -24,13 +24,13 @@ object MushafPageLoader {
     }
 
     private fun getStorageDir(context: Context): File {
-        val dir = File(context.filesDir, "mushaf_pages")
+        val dir = File(context.filesDir, "mushaf_pages_v2")
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
 
     fun getPageFile(context: Context, page: Int): File {
-        return File(getStorageDir(context), String.format(Locale.US, "page_%03d.png", page))
+        return File(getStorageDir(context), String.format(Locale.US, "page_1920_%03d.png", page))
     }
 
     fun isPageCached(context: Context, page: Int): Boolean {
@@ -39,11 +39,11 @@ object MushafPageLoader {
     }
 
     private fun getPageUrl(page: Int): String {
-        return String.format(Locale.US, "https://files.quran.app/hafs/madani/width_1024/page%03d.png", page)
+        return String.format(Locale.US, "https://files.quran.app/hafs/madani/width_1920/page%03d.png", page)
     }
 
     private fun getFallbackUrl(page: Int): String {
-        return String.format(Locale.US, "https://android.quran.com/data/width_1024/page%03d.png", page)
+        return String.format(Locale.US, "https://android.quran.com/data/width_1920/page%03d.png", page)
     }
 
     suspend fun loadPage(context: Context, page: Int): Bitmap? = withContext(Dispatchers.IO) {

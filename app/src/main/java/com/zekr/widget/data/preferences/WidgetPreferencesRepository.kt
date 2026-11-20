@@ -344,6 +344,42 @@ class WidgetPreferencesRepository(private val context: Context) {
     suspend fun saveMushafNightMode(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[booleanPreferencesKey("mushaf_night_mode")] = enabled
+            prefs[intPreferencesKey("pref_mushaf_reading_theme")] = if (enabled) 1 else 0
+        }
+    }
+
+    val mushafBookmarkPageFlow: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[intPreferencesKey("pref_mushaf_bookmark_page")] ?: 0
+    }
+
+    suspend fun saveMushafBookmark(page: Int) {
+        context.dataStore.edit { prefs ->
+            if (page <= 0) {
+                prefs.remove(intPreferencesKey("pref_mushaf_bookmark_page"))
+            } else {
+                prefs[intPreferencesKey("pref_mushaf_bookmark_page")] = page.coerceIn(1, 604)
+            }
+        }
+    }
+
+    val mushafReadingThemeFlow: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[intPreferencesKey("pref_mushaf_reading_theme")] ?: if (prefs[booleanPreferencesKey("mushaf_night_mode")] == true) 1 else 0
+    }
+
+    suspend fun saveMushafReadingTheme(theme: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[intPreferencesKey("pref_mushaf_reading_theme")] = theme
+            prefs[booleanPreferencesKey("mushaf_night_mode")] = (theme == 1)
+        }
+    }
+
+    val simpleModeFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[booleanPreferencesKey("pref_simple_mode")] ?: false
+    }
+
+    suspend fun saveSimpleMode(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[booleanPreferencesKey("pref_simple_mode")] = enabled
         }
     }
 

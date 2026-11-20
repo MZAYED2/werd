@@ -55,6 +55,8 @@ object WerdAudioPlayerManager {
     private val _state = MutableStateFlow(PlayerUiState())
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
+    var onTrackEndedListener: (() -> Boolean)? = null
+
     private var appContext: Context? = null
     private val prefs by lazy {
         appContext?.getSharedPreferences("werd_audio_playback_v2", Context.MODE_PRIVATE)
@@ -134,7 +136,9 @@ object WerdAudioPlayerManager {
                     )
                 }
                 if (playbackState == Player.STATE_ENDED) {
-                    if (_state.value.isRepeating) {
+                    if (onTrackEndedListener?.invoke() == true) {
+                        // Handled by active routine
+                    } else if (_state.value.isRepeating) {
                         // Media3 handles repeating
                     } else if (_state.value.quranPlayScope == QuranPlayScope.CONTINUOUS_TO_END &&
                         _state.value.currentTrack?.surahNumber != null &&
@@ -212,6 +216,10 @@ object WerdAudioPlayerManager {
     }
 
     fun playTrack(track: AudioTrack) {
+        playTrackAt(track, 0L)
+    }
+
+    fun playTrackAt(track: AudioTrack, startPositionMs: Long) {
         val c = controller ?: return
         _state.update {
             it.copy(
@@ -236,7 +244,7 @@ object WerdAudioPlayerManager {
             )
             .build()
 
-        c.setMediaItem(mediaItem)
+        c.setMediaItem(mediaItem, startPositionMs)
         c.prepare()
         c.play()
         persistState()

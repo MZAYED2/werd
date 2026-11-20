@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
-    private val targetTab = mutableIntStateOf(0)
+    private val targetTab = mutableIntStateOf(-1)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
                     isWidgetConfigMode = isWidgetConfigMode,
                     widgetId = appWidgetId,
                     initialTab = targetTab.intValue,
-                    onInitialTabHandled = { targetTab.intValue = 0 },
+                    onInitialTabHandled = { targetTab.intValue = -1 },
                     onSaveAndClose = {
                         if (isWidgetConfigMode) {
                             val resultValue = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
