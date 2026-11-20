@@ -1,162 +1,193 @@
 package com.zekr.widget.widget.render
 
-import kotlin.math.min
-import kotlin.math.roundToInt
+enum class WidgetDisplayMode {
+    COMPACT,   // heightDp < 75f (1-row thin horizontal bar)
+    MEDIUM,    // 75f <= heightDp < 165f (2-row balanced text + citation + bottom buttons)
+    EXPANDED   // heightDp >= 165f (3+ rows generous layout with header, large text, citation, buttons)
+}
 
 data class WidgetLayout(
     val widthDp: Float,
     val heightDp: Float,
     val density: Float,
     val scaleFactor: Float,
+    val mode: WidgetDisplayMode = WidgetDisplayMode.MEDIUM,
     val showInteractiveBar: Boolean,
     val hasMultiRep: Boolean,
-
-    // Bottom bar dimensions in DP
     val barHeightDp: Float,
     val bottomMarginDp: Float,
     val rightMarginDp: Float,
     val buttonTouchSizeDp: Float,
     val drawnButtonRadiusDp: Float,
     val barCenterYDp: Float,
-
-    // Button Centers in DP (from left=0 to right=widthDp)
-    val favCenterXDp: Float,
-    val shareCenterXDp: Float,
+    val menuCenterXDp: Float,
     val tasbeehCenterXDp: Float,
-
-    // Repetition pill in DP
-    val pillCenterXDp: Float,
-    val pillCenterYDp: Float,
-    val pillWidthDp: Float,
-    val pillHeightDp: Float,
-
-    // Zekr Text area in DP
+    val openWerdCenterXDp: Float = 0f,
+    val headerCenterYDp: Float?,
     val textTopPaddingDp: Float,
-    val textHorizontalPaddingDp: Float,
+    val textStartXDp: Float = 0f,
     val availableTextHeightDp: Float,
     val maxTextWidthDp: Float,
-
-    // Citation text in DP
     val citationCenterXDp: Float,
-    val citationCenterYDp: Float,
     val maxCitationWidthDp: Float
 ) {
     fun toPx(dp: Float): Float = dp * density * scaleFactor
 
-    val favCxPx: Float get() = toPx(favCenterXDp)
-    val shareCxPx: Float get() = toPx(shareCenterXDp)
+    val menuCxPx: Float get() = toPx(menuCenterXDp)
     val tasbeehCxPx: Float get() = toPx(tasbeehCenterXDp)
+    val openWerdCxPx: Float get() = toPx(openWerdCenterXDp)
     val barCenterYPx: Float get() = toPx(barCenterYDp)
     val drawnButtonRadiusPx: Float get() = toPx(drawnButtonRadiusDp)
-
-    val pillCxPx: Float get() = toPx(pillCenterXDp)
-    val pillCyPx: Float get() = toPx(pillCenterYDp)
-    val pillWidthPx: Float get() = toPx(pillWidthDp)
-    val pillHeightPx: Float get() = toPx(pillHeightDp)
-
     val textTopPaddingPx: Float get() = toPx(textTopPaddingDp)
-    val textHorizontalPaddingPx: Float get() = toPx(textHorizontalPaddingDp)
+    val textStartXPx: Float get() = toPx(textStartXDp)
     val availableTextHeightPx: Float get() = toPx(availableTextHeightDp)
     val maxTextWidthPx: Float get() = toPx(maxTextWidthDp)
-
     val citationCxPx: Float get() = toPx(citationCenterXDp)
-    val citationCyPx: Float get() = toPx(citationCenterYDp)
     val maxCitationWidthPx: Float get() = toPx(maxCitationWidthDp)
 }
 
 object WidgetLayoutGeometry {
-
     fun compute(
         widthDp: Float,
         heightDp: Float,
         density: Float,
-        scaleFactor: Float = 1.0f,
-        hasMultiRep: Boolean = false
+        scaleFactor: Float = 1f,
+        hasMultiRep: Boolean = false,
+        interactive: Boolean = true
     ): WidgetLayout {
-        val safeW = widthDp.coerceAtLeast(120f)
-        val safeH = heightDp.coerceAtLeast(70f)
-        val showInteractiveBar = safeH >= 85f
+        val width = widthDp.coerceAtLeast(1f)
+        val height = heightDp.coerceAtLeast(1f)
 
-        // Touch target sizing: 48dp standard, adapted gracefully on compact or narrow widgets
-        val isCompactHeight = safeH < 110f
-        val buttonTouchSizeDp = when {
-            safeW < 190f -> (safeW * 0.28f).coerceAtLeast(36f)
-            isCompactHeight -> 44f
-            else -> 48f
+        val mode = when {
+            height < 75f -> WidgetDisplayMode.COMPACT
+            height < 180f -> WidgetDisplayMode.MEDIUM
+            else -> WidgetDisplayMode.EXPANDED
         }
-        val barHeightDp = if (isCompactHeight) 44f else 48f
-        val bottomMarginDp = when {
-            safeH > 160f -> 8f
-            isCompactHeight -> 2f
-            else -> 4f
+
+        val margin = when (mode) {
+            WidgetDisplayMode.COMPACT -> (width * 0.038f).coerceIn(8f, 14f)
+            WidgetDisplayMode.MEDIUM -> (width * 0.042f).coerceIn(8f, 18f)
+            WidgetDisplayMode.EXPANDED -> (width * 0.048f).coerceIn(12f, 22f)
         }
-        val rightMarginDp = if (safeW > 280f) 10f else 6f
-        val drawnButtonRadiusDp = (buttonTouchSizeDp * 0.38f).coerceIn(14f, 19f)
 
-        val barCenterYDp = safeH - bottomMarginDp - (barHeightDp / 2f)
+        val button = if (interactive) {
+            when (mode) {
+                WidgetDisplayMode.COMPACT -> (height * 0.72f).coerceIn(28f, 40f)
+                WidgetDisplayMode.MEDIUM -> (height * 0.34f).coerceIn(34f, 44f)
+                WidgetDisplayMode.EXPANDED -> 46f
+            }
+        } else 0f
 
-        // Three buttons ordered from right to left: Favorite, Share, Tasbeeh
-        val favCenterXDp = safeW - rightMarginDp - (buttonTouchSizeDp / 2f)
-        val shareCenterXDp = safeW - rightMarginDp - buttonTouchSizeDp - (buttonTouchSizeDp / 2f)
-        val tasbeehCenterXDp = safeW - rightMarginDp - (2f * buttonTouchSizeDp) - (buttonTouchSizeDp / 2f)
+        val bottomMargin = if (interactive) {
+            when (mode) {
+                WidgetDisplayMode.COMPACT -> 0f
+                WidgetDisplayMode.MEDIUM -> (height * 0.035f).coerceIn(2f, 8f)
+                WidgetDisplayMode.EXPANDED -> (height * 0.035f).coerceIn(6f, 12f)
+            }
+        } else 0f
 
-        // Repetition pill: ONLY when height is generous (>= 150dp) AND widget is wide enough (>= 220dp)
-        // In thin or compact heights, repetition is integrated directly with the citation text so text is never overlapped
-        val canShowPill = hasMultiRep && safeH >= 150f && safeW >= 220f
-        val pillHeightDp = 26f
-        val pillWidthDp = 125f.coerceAtMost(safeW - 40f)
-        val pillCenterXDp = safeW / 2f
-        val pillCenterYDp = barCenterYDp - (barHeightDp / 2f) - (pillHeightDp / 2f) - 4f
-
-        // Citation text occupies the space left of the buttons
-        val leftMarginDp = if (safeW > 280f) 16f else 8f
-        val buttonsLeftEdgeDp = safeW - rightMarginDp - (3f * buttonTouchSizeDp) - 8f
-        val maxCitationWidthDp = (buttonsLeftEdgeDp - leftMarginDp).coerceAtLeast(0f)
-        val citationCenterXDp = leftMarginDp + (maxCitationWidthDp / 2f)
-        val citationCenterYDp = barCenterYDp
-
-        // Arabic Zekr Text area - guaranteed collision-free with optimal vertical and horizontal breathing room
-        val reservedBottomDp = when {
-            !showInteractiveBar -> 8f
-            canShowPill -> barHeightDp + bottomMarginDp + pillHeightDp + 6f
-            else -> barHeightDp + bottomMarginDp + (if (isCompactHeight) 2f else 4f)
+        val barCenterY = when (mode) {
+            WidgetDisplayMode.COMPACT -> height / 2f
+            else -> height - bottomMargin - button / 2f
         }
-        val textTopPaddingDp = when {
-            safeH > 160f -> 12f
-            isCompactHeight -> 4f
-            else -> 6f
+
+        val menuCenterX: Float
+        val tasbeehCenterX: Float
+        val openWerdCenterX: Float
+        val textStartX: Float
+        val maxTextWidth: Float
+        val textTop: Float
+        val availableTextHeight: Float
+        val headerCenter: Float?
+        val maxCitationWidth: Float
+        val citationCenterX: Float
+        val barHeight: Float
+
+        when (mode) {
+            WidgetDisplayMode.COMPACT -> {
+                barHeight = 0f
+                // Symmetrical, optically centered 1-row widget layout:
+                // Menu (☰) is placed on the left:
+                menuCenterX = margin + button * 0.5f
+                // Tasbeeh (📿) is placed on the right:
+                tasbeehCenterX = width - margin - button * 0.5f
+                // In single row mode, "فتح وِرد" is placed inside the ☰ menu so text is not compressed:
+                openWerdCenterX = 0f
+
+                // Text occupies the central content area with 100% equal left & right margins:
+                val sideMargin = margin + button + 10f
+                textStartX = sideMargin
+                maxTextWidth = (width - 2 * sideMargin).coerceAtLeast(30f)
+                textTop = 4f
+                availableTextHeight = (height - 8f).coerceAtLeast(20f)
+
+                headerCenter = null
+                maxCitationWidth = 0f
+                citationCenterX = 0f
+            }
+            WidgetDisplayMode.MEDIUM -> {
+                barHeight = button
+                menuCenterX = width - margin - button / 2f
+                tasbeehCenterX = width - margin - button * 1.5f
+                openWerdCenterX = margin + button / 2f
+
+                headerCenter = null
+                textTop = (margin * 0.8f).coerceIn(6f, 12f)
+                val textBottom = barCenterY - button / 2f - 4f
+                availableTextHeight = (textBottom - textTop).coerceAtLeast(30f)
+                textStartX = margin
+                maxTextWidth = (width - 2 * margin).coerceAtLeast(50f)
+
+                // Middle area between openWerd on the far left and tasbeeh on the right:
+                val leftEdge = margin + button + 8f
+                val rightEdge = width - margin - 2 * button - 8f
+                maxCitationWidth = (rightEdge - leftEdge).coerceAtLeast(0f)
+                citationCenterX = (leftEdge + rightEdge) / 2f
+            }
+            WidgetDisplayMode.EXPANDED -> {
+                barHeight = button
+                menuCenterX = width - margin - button / 2f
+                tasbeehCenterX = width - margin - button * 1.5f
+                openWerdCenterX = margin + button / 2f
+
+                headerCenter = 22f
+                textTop = 42f
+                val textBottom = barCenterY - button / 2f - 8f
+                availableTextHeight = (textBottom - textTop).coerceAtLeast(60f)
+                textStartX = margin
+                maxTextWidth = (width - 2 * margin).coerceAtLeast(60f)
+
+                val leftEdge = margin + button + 10f
+                val rightEdge = width - margin - 2 * button - 10f
+                maxCitationWidth = (rightEdge - leftEdge).coerceAtLeast(0f)
+                citationCenterX = (leftEdge + rightEdge) / 2f
+            }
         }
-        val availableTextHeightDp = (safeH - textTopPaddingDp - reservedBottomDp).coerceAtLeast(30f)
-        val textHorizontalPaddingDp = (safeW * 0.05f).coerceIn(10f, 20f)
-        val maxTextWidthDp = (safeW - (textHorizontalPaddingDp * 2f)).coerceAtLeast(60f)
 
         return WidgetLayout(
-            widthDp = safeW,
-            heightDp = safeH,
+            widthDp = width,
+            heightDp = height,
             density = density.coerceAtLeast(1f),
             scaleFactor = scaleFactor.coerceAtLeast(0.1f),
-            showInteractiveBar = showInteractiveBar,
-            hasMultiRep = canShowPill,
-            barHeightDp = barHeightDp,
-            bottomMarginDp = bottomMarginDp,
-            rightMarginDp = rightMarginDp,
-            buttonTouchSizeDp = buttonTouchSizeDp,
-            drawnButtonRadiusDp = drawnButtonRadiusDp,
-            barCenterYDp = barCenterYDp,
-            favCenterXDp = favCenterXDp,
-            shareCenterXDp = shareCenterXDp,
-            tasbeehCenterXDp = tasbeehCenterXDp,
-            pillCenterXDp = pillCenterXDp,
-            pillCenterYDp = pillCenterYDp,
-            pillWidthDp = pillWidthDp,
-            pillHeightDp = pillHeightDp,
-            textTopPaddingDp = textTopPaddingDp,
-            textHorizontalPaddingDp = textHorizontalPaddingDp,
-            availableTextHeightDp = availableTextHeightDp,
-            maxTextWidthDp = maxTextWidthDp,
-            citationCenterXDp = citationCenterXDp,
-            citationCenterYDp = citationCenterYDp,
-            maxCitationWidthDp = maxCitationWidthDp
+            mode = mode,
+            showInteractiveBar = interactive,
+            hasMultiRep = hasMultiRep,
+            barHeightDp = barHeight,
+            bottomMarginDp = bottomMargin,
+            rightMarginDp = margin,
+            buttonTouchSizeDp = button,
+            drawnButtonRadiusDp = button * 0.36f,
+            barCenterYDp = barCenterY,
+            menuCenterXDp = menuCenterX,
+            tasbeehCenterXDp = tasbeehCenterX,
+            openWerdCenterXDp = openWerdCenterX,
+            headerCenterYDp = headerCenter,
+            textTopPaddingDp = textTop,
+            textStartXDp = textStartX,
+            availableTextHeightDp = availableTextHeight,
+            maxTextWidthDp = maxTextWidth,
+            citationCenterXDp = citationCenterX,
+            maxCitationWidthDp = maxCitationWidth
         )
     }
 }

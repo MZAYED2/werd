@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -27,13 +29,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zekr.widget.data.model.WirdStats
+import com.zekr.widget.data.model.ZekrEntity
 import com.zekr.widget.data.repository.ZekrRepository
 
 @Composable
 fun DailyWirdTabContent(
     stats: WirdStats,
+    allItems: List<ZekrEntity> = emptyList(),
+    openGuidedQuran: Boolean = false,
+    onGuidedQuranOpened: () -> Unit = {},
     onUpdateDailyGoal: (Int) -> Unit
 ) {
+    val palette = MaterialTheme.colorScheme
     val today = stats.todayRecord()
     val currentStreak = stats.currentStreak()
     val bestStreak = maxOf(stats.bestStreak, currentStreak)
@@ -50,21 +57,27 @@ fun DailyWirdTabContent(
     )
     val goalReached = today.completedCount >= goal
 
+    val listState = rememberLazyListState()
+    LaunchedEffect(openGuidedQuran) {
+        if (openGuidedQuran) listState.scrollToItem(0)
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item(key = "guided-wird") { GuidedWirdCard(allItems, openGuidedQuran, onGuidedQuranOpened) }
         // 1. Hero Daily Consistency Ring Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF16181E)),
+                colors = CardDefaults.cardColors(containerColor = palette.surface),
                 border = BorderStroke(
                     1.dp,
-                    if (goalReached) Color(0xFFD4AF37).copy(alpha = 0.55f)
-                    else Color.White.copy(alpha = 0.08f)
+                    if (goalReached) palette.tertiary.copy(alpha = 0.55f)
+                    else palette.outlineVariant
                 )
             ) {
                 Row(
@@ -80,15 +93,15 @@ fun DailyWirdTabContent(
                         contentAlignment = Alignment.Center
                     ) {
                         val ringColors = if (goalReached) {
-                            listOf(Color(0xFFD4AF37), Color(0xFF10B981))
+                            listOf(palette.tertiary, palette.primary)
                         } else {
-                            listOf(Color(0xFF10B981), Color(0xFF34D399))
+                            listOf(palette.primary, palette.primary)
                         }
 
                         Canvas(modifier = Modifier.fillMaxSize()) {
                             val strokeWidth = 12.dp.toPx()
                             drawArc(
-                                color = Color.White.copy(alpha = 0.08f),
+                                color = palette.outlineVariant,
                                 startAngle = -90f,
                                 sweepAngle = 360f,
                                 useCenter = false,
@@ -110,12 +123,12 @@ fun DailyWirdTabContent(
                                 text = "${ZekrRepository.toArabicDigits(today.completedCount)} / ${ZekrRepository.toArabicDigits(goal)}",
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 20.sp,
-                                color = if (goalReached) Color(0xFFFDE68A) else Color(0xFFF8FAFC)
+                                color = if (goalReached) palette.tertiary else palette.onSurface
                             )
                             Text(
                                 text = if (goalReached) "أتممت ورد اليوم ✓" else "ذكر اليوم",
                                 fontSize = 11.sp,
-                                color = if (goalReached) Color(0xFF6EE7B7) else Color(0xFF94A3B8)
+                                color = if (goalReached) palette.primary else palette.onSurfaceVariant
                             )
                         }
                     }
@@ -133,7 +146,7 @@ fun DailyWirdTabContent(
                         StatMiniPill(
                             label = "إجمالي تسبيحات اليوم",
                             value = "${ZekrRepository.toArabicDigits(today.totalTasbihTaps)} تسبيحة",
-                            accentColor = Color(0xFF10B981)
+                            accentColor = palette.primary
                         )
                         StatMiniPill(
                             label = "أطول سلسلة",
@@ -163,7 +176,7 @@ fun DailyWirdTabContent(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(
-                                    if (day.isToday) Color.White.copy(alpha = 0.06f)
+                                    if (day.isToday) palette.primaryContainer.copy(alpha = 0.35f)
                                     else Color.Transparent
                                 )
                                 .padding(horizontal = 4.dp, vertical = 6.dp)
@@ -175,7 +188,7 @@ fun DailyWirdTabContent(
                                 Canvas(modifier = Modifier.fillMaxSize()) {
                                     val stroke = 4.dp.toPx()
                                     drawArc(
-                                        color = Color.White.copy(alpha = 0.10f),
+                                        color = palette.outlineVariant.copy(alpha = 0.5f),
                                         startAngle = -90f,
                                         sweepAngle = 360f,
                                         useCenter = false,
@@ -183,7 +196,7 @@ fun DailyWirdTabContent(
                                     )
                                     if (day.progress > 0f) {
                                         drawArc(
-                                            color = if (day.progress >= 1f) Color(0xFFD4AF37) else Color(0xFF10B981),
+                                            color = if (day.progress >= 1f) palette.tertiary else palette.primary,
                                             startAngle = -90f,
                                             sweepAngle = 360f * day.progress,
                                             useCenter = false,
@@ -195,7 +208,7 @@ fun DailyWirdTabContent(
                                     text = ZekrRepository.toArabicDigits(day.completedCount),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (day.completedCount > 0) Color(0xFFF8FAFC) else Color(0xFF64748B)
+                                    color = if (day.completedCount > 0) palette.onSurface else palette.onSurfaceVariant.copy(alpha = 0.65f)
                                 )
                             }
 
@@ -203,7 +216,7 @@ fun DailyWirdTabContent(
                                 text = day.arabicDayShort,
                                 fontSize = 10.sp,
                                 fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.Normal,
-                                color = if (day.isToday) Color(0xFF6EE7B7) else Color(0xFF94A3B8)
+                                color = if (day.isToday) palette.primary else palette.onSurfaceVariant
                             )
                         }
                     }
@@ -224,7 +237,7 @@ fun DailyWirdTabContent(
                     BreakdownBox(
                         title = "آيات قرآنية",
                         count = today.quranCompleted,
-                        color = Color(0xFF34D399),
+                        color = palette.primary,
                         modifier = Modifier.weight(1f)
                     )
                     BreakdownBox(
@@ -279,20 +292,20 @@ private fun StatMiniPill(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.04f))
-            .border(1.dp, accentColor.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         Text(
             text = label,
             fontSize = 10.5.sp,
-            color = Color(0xFF94A3B8)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = value,
             fontSize = 13.5.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFFF8FAFC)
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -322,7 +335,7 @@ private fun BreakdownBox(
         Text(
             text = title,
             fontSize = 11.sp,
-            color = Color(0xFFE2E8F0),
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center
         )
     }

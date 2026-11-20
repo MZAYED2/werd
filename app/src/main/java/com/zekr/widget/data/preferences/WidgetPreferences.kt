@@ -165,10 +165,10 @@ data class WidgetSettings(
  * wrong once the dark wallpaper shows through.
  */
 object AdaptiveContrast {
-    const val DARK_TEXT = 0xFF1C1C1EL
-    const val LIGHT_TEXT = 0xFFFFFFFFL
-    const val DARK_ACCENT = 0xFF1B5E20L
-    const val LIGHT_ACCENT = 0xFFA5D6A7L
+    const val DARK_TEXT = com.zekr.widget.ui.theme.WerdDesignTokens.IvoryJade.Text
+    const val LIGHT_TEXT = com.zekr.widget.ui.theme.WerdDesignTokens.MidnightJade.Text
+    const val DARK_ACCENT = com.zekr.widget.ui.theme.WerdDesignTokens.IvoryJade.Emerald
+    const val LIGHT_ACCENT = com.zekr.widget.ui.theme.WerdDesignTokens.MidnightJade.AccessibleEmerald
 
     /** Typical dark wallpaper / app preview underlay. */
     const val UNDERLAY_LUMINANCE = 0.22f

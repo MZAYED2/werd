@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,8 +63,8 @@ fun LibraryTabContent(
     onSaveCustomItem: (ZekrEntity) -> Unit,
     onDeleteCustomItem: (ZekrEntity) -> Unit
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf(LibraryFilter.ALL) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedFilter by rememberSaveable { mutableStateOf(LibraryFilter.ALL) }
     var editingCustomItem by remember { mutableStateOf<ZekrEntity?>(null) }
     var showCustomDialog by remember { mutableStateOf(false) }
 
@@ -86,7 +87,7 @@ fun LibraryTabContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
@@ -104,8 +105,8 @@ fun LibraryTabContent(
                         },
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF10B981),
-                            contentColor = Color(0xFF071510)
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
                     ) {
@@ -128,13 +129,13 @@ fun LibraryTabContent(
                             .weight(1f)
                             .clip(RoundedCornerShape(14.dp))
                             .background(
-                                if (settings.favoritesOnlyMode) Color(0xFFFF5C7A).copy(alpha = 0.16f)
-                                else Color(0xFF16181E)
+                                if (settings.favoritesOnlyMode) MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+                                else MaterialTheme.colorScheme.surface
                             )
                             .border(
                                 1.dp,
-                                if (settings.favoritesOnlyMode) Color(0xFFFF5C7A).copy(alpha = 0.55f)
-                                else Color.White.copy(alpha = 0.08f),
+                                if (settings.favoritesOnlyMode) MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
+                                else MaterialTheme.colorScheme.outlineVariant,
                                 RoundedCornerShape(14.dp)
                             )
                             .clickable { onToggleFavoritesOnlyMode(!settings.favoritesOnlyMode) }
@@ -146,7 +147,7 @@ fun LibraryTabContent(
                             text = "المفضلة فقط في الويدجت",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (settings.favoritesOnlyMode) Color(0xFFFF9AAD) else Color(0xFFD0D5DD),
+                            color = if (settings.favoritesOnlyMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
@@ -155,7 +156,7 @@ fun LibraryTabContent(
                         Icon(
                             imageVector = if (settings.favoritesOnlyMode) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                             contentDescription = null,
-                            tint = if (settings.favoritesOnlyMode) Color(0xFFFF5C7A) else Color(0xFF98A2B3),
+                            tint = if (settings.favoritesOnlyMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -169,7 +170,7 @@ fun LibraryTabContent(
                     placeholder = {
                         Text(
                             text = "ابحث في الآيات والأحاديث والأذكار...",
-                            color = Color(0xFF98A2B3),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 13.sp
                         )
                     },
@@ -177,7 +178,7 @@ fun LibraryTabContent(
                         Icon(
                             imageVector = Icons.Filled.Search,
                             contentDescription = null,
-                            tint = Color(0xFF98A2B3)
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
                     trailingIcon = {
@@ -186,7 +187,7 @@ fun LibraryTabContent(
                                 Icon(
                                     imageVector = Icons.Filled.Close,
                                     contentDescription = "مسح",
-                                    tint = Color(0xFF98A2B3)
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -194,12 +195,12 @@ fun LibraryTabContent(
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFF16181E),
-                        unfocusedContainerColor = Color(0xFF16181E),
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                         focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.08f),
-                        focusedTextColor = Color(0xFFF2F4F7),
-                        unfocusedTextColor = Color(0xFFF2F4F7)
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
 
@@ -234,8 +235,8 @@ fun LibraryTabContent(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF16181E)),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(
                         modifier = Modifier
@@ -250,13 +251,13 @@ fun LibraryTabContent(
                                 else -> "لا توجد نتائج مطابقة للبحث"
                             },
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE4E7EC),
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 14.sp
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "اضغط على ♥ لحفظ أي ذكر في المفضلة، أو أضف ذكرك الخاص من الزر بالأعلى.",
-                            color = Color(0xFF98A2B3),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center
                         )
@@ -296,6 +297,7 @@ fun LibraryTabContent(
             onSave = { saved ->
                 onSaveCustomItem(saved)
                 showCustomDialog = false
+                selectedFilter = LibraryFilter.CUSTOM
             }
         )
     }
@@ -324,11 +326,11 @@ private fun ZekrLibraryCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isPinned) Color(0xFF142620) else Color(0xFF16181E)
+            containerColor = if (isPinned) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
         ),
         border = BorderStroke(
             width = if (isPinned) 1.5.dp else 1.dp,
-            color = if (isPinned) Color(0xFF10B981).copy(alpha = 0.65f) else Color.White.copy(alpha = 0.08f)
+            color = if (isPinned) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f) else MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Column(
@@ -350,13 +352,13 @@ private fun ZekrLibraryCard(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color.White.copy(alpha = 0.07f))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
                             text = typeBadge,
                             fontSize = 10.5.sp,
-                            color = Color(0xFFCBD5E1),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -364,13 +366,13 @@ private fun ZekrLibraryCard(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF10B981).copy(alpha = 0.2f))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
                                 text = "مثبّت في الويدجت",
                                 fontSize = 10.5.sp,
-                                color = Color(0xFF6EE7B7),
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -381,10 +383,10 @@ private fun ZekrLibraryCard(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFFD4AF37).copy(alpha = 0.16f))
+                            .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f))
                             .border(
                                 1.dp,
-                                Color(0xFFD4AF37).copy(alpha = 0.4f),
+                                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f),
                                 RoundedCornerShape(10.dp)
                             )
                             .padding(horizontal = 8.dp, vertical = 3.dp)
@@ -392,7 +394,7 @@ private fun ZekrLibraryCard(
                         Text(
                             text = "${ZekrRepository.toArabicDigits(item.repetition)} مرات",
                             fontSize = 11.sp,
-                            color = Color(0xFFFDE68A),
+                            color = MaterialTheme.colorScheme.tertiary,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -405,7 +407,7 @@ private fun ZekrLibraryCard(
                 fontFamily = FontHelper.getComposeFontFamily(settings.font),
                 fontSize = 16.5.sp,
                 lineHeight = 27.sp,
-                color = Color(0xFFF8FAFC),
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -415,11 +417,11 @@ private fun ZekrLibraryCard(
                 Text(
                     text = citation,
                     fontSize = 11.5.sp,
-                    color = Color(0xFF94A3B8)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Actions Row
             Row(
@@ -438,14 +440,14 @@ private fun ZekrLibraryCard(
                             .size(36.dp)
                             .clip(CircleShape)
                             .background(
-                                if (isFavorite) Color(0xFFFF5C7A).copy(alpha = 0.18f)
-                                else Color.White.copy(alpha = 0.05f)
+                                if (isFavorite) MaterialTheme.colorScheme.error.copy(alpha = 0.18f)
+                                else MaterialTheme.colorScheme.surfaceVariant
                             )
                     ) {
                         Icon(
                             imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                             contentDescription = "المفضلة",
-                            tint = if (isFavorite) Color(0xFFFF6B86) else Color(0xFFCBD5E1),
+                            tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -456,12 +458,12 @@ private fun ZekrLibraryCard(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.05f))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Share,
                             contentDescription = "مشاركة",
-                            tint = Color(0xFFCBD5E1),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(17.dp)
                         )
                     }
@@ -472,12 +474,12 @@ private fun ZekrLibraryCard(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.05f))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Edit,
                                 contentDescription = "تعديل",
-                                tint = Color(0xFFCBD5E1),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(17.dp)
                             )
                         }
@@ -494,7 +496,7 @@ private fun ZekrLibraryCard(
                             Icon(
                                 imageVector = Icons.Filled.Delete,
                                 contentDescription = "حذف",
-                                tint = Color(0xFFFCA5A5),
+                                tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(17.dp)
                             )
                         }
@@ -506,8 +508,8 @@ private fun ZekrLibraryCard(
                     onClick = onTogglePin,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (isPinned) Color(0xFF10B981) else Color.White.copy(alpha = 0.08f),
-                        contentColor = if (isPinned) Color(0xFF061610) else Color(0xFFE2E8F0)
+                        containerColor = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                        contentColor = if (isPinned) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                     ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
@@ -544,12 +546,12 @@ private fun AddOrEditCustomZekrDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF16181E),
+        containerColor = MaterialTheme.colorScheme.surface,
         title = {
             Text(
                 text = if (initialItem == null) "إضافة ذكر أو دعاء خاص" else "تعديل الذكر الخاص",
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFF2F4F7),
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 17.sp
             )
         },
@@ -579,7 +581,7 @@ private fun AddOrEditCustomZekrDialog(
                     Text(
                         text = "التصنيف الزمني",
                         fontSize = 12.sp,
-                        color = Color(0xFFB4BAC6),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold
                     )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -597,7 +599,7 @@ private fun AddOrEditCustomZekrDialog(
                     Text(
                         text = "عدد مرات التكرار",
                         fontSize = 12.sp,
-                        color = Color(0xFFB4BAC6),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold
                     )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

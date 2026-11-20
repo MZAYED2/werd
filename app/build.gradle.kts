@@ -16,8 +16,8 @@ val keystoreProperties = Properties().apply {
 }
 
 val appReleaseName = "werd"
-val appVersionCode = 8
-val appVersionName = "1.7"
+val appVersionCode = 9
+val appVersionName = "1.8"
 
 android {
     namespace = "com.zekr.widget"
@@ -101,6 +101,10 @@ dependencies {
 
     // Periodic style rotation for pattern + background
     implementation(libs.androidx.work.runtime.ktx)
+
+    // Media3 Background Playback & MediaSession
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.session)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

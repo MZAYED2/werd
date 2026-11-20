@@ -1,10 +1,12 @@
 package com.zekr.widget
 
 import com.zekr.widget.data.model.ContentType
+import com.zekr.widget.data.model.WirdStats
 import com.zekr.widget.data.model.ZekrEntity
 import com.zekr.widget.data.preferences.GlassColorPreset
 import com.zekr.widget.data.preferences.GradientDirection
 import com.zekr.widget.data.preferences.PatternType
+import com.zekr.widget.data.repository.ZekrRepository
 import com.zekr.widget.data.preferences.WidgetFont
 import com.zekr.widget.data.preferences.WidgetSettings
 import com.zekr.widget.ui.theme.FontHelper
@@ -152,7 +154,7 @@ class WidgetVerificationTest {
         )
         assertEquals(
             "Translucent white glass needs light text",
-            0xFFFFFFFFL,
+            com.zekr.widget.ui.theme.WerdDesignTokens.MidnightJade.Text,
             translucentWhite.getAdaptiveTextColor()
         )
 
@@ -164,7 +166,7 @@ class WidgetVerificationTest {
         )
         assertEquals(
             "Opaque white glass needs dark text",
-            0xFF1C1C1EL,
+            com.zekr.widget.ui.theme.WerdDesignTokens.IvoryJade.Text,
             opaqueWhite.getAdaptiveTextColor()
         )
 
@@ -173,7 +175,7 @@ class WidgetVerificationTest {
             primaryColor = 0xFF0D1310,
             glassOpacity = 0.35f
         )
-        assertEquals("Dark bg should use light text", 0xFFFFFFFFL, darkSettings.getAdaptiveTextColor())
+        assertEquals("Dark bg should use light text", com.zekr.widget.ui.theme.WerdDesignTokens.MidnightJade.Text, darkSettings.getAdaptiveTextColor())
     }
 
     @Test
@@ -652,6 +654,9 @@ class WidgetVerificationTest {
             assertTrue("Text width must be >= 60dp for size ${wDp}x${hDp}", layoutNoRep.maxTextWidthDp >= 60f)
             assertTrue("Text width must fit within widget width", layoutNoRep.maxTextWidthDp < wDp)
 
+            assertTrue("Two action regions fit", layoutNoRep.tasbeehCenterXDp - layoutNoRep.buttonTouchSizeDp / 2 > 0f)
+            assertEquals(layoutNoRep.buttonTouchSizeDp, layoutNoRep.menuCenterXDp - layoutNoRep.tasbeehCenterXDp, 0.01f)
+
             // When interactive bar is shown, ensure text area does not collide with bottom bar
             if (layoutNoRep.showInteractiveBar) {
                 val textBottomDp = layoutNoRep.textTopPaddingDp + layoutNoRep.availableTextHeightDp
@@ -670,5 +675,158 @@ class WidgetVerificationTest {
             )
             assertTrue("Multi-rep text height must be >= 30dp", layoutWithRep.availableTextHeightDp >= 30f)
         }
+    }
+
+    @Test
+    fun testWidgetResponsiveModesThreeTiers() {
+        // 1. Compact (thin horizontal bar, e.g. 1 row)
+        val compactLayout = com.zekr.widget.widget.render.WidgetLayoutGeometry.compute(
+            widthDp = 340f,
+            heightDp = 50f,
+            density = 2.75f
+        )
+        assertEquals(com.zekr.widget.widget.render.WidgetDisplayMode.COMPACT, compactLayout.mode)
+        assertTrue("Compact mode has available text height >= 20dp", compactLayout.availableTextHeightDp >= 20f)
+        assertTrue("Compact mode has available text width >= 60dp", compactLayout.maxTextWidthDp >= 60f)
+        assertTrue("Compact mode has menu on left and tasbeeh on right", compactLayout.tasbeehCenterXDp > compactLayout.menuCenterXDp)
+        assertEquals("Open werd button in compact mode is placed in menu to save space (WERD-022)", 0f, compactLayout.openWerdCenterXDp, 0.001f)
+        assertTrue("Buttons do not overlap left margin", compactLayout.menuCenterXDp - compactLayout.buttonTouchSizeDp / 2f >= 0f)
+        assertTrue("Text area starts after buttons", compactLayout.textStartXDp > compactLayout.menuCenterXDp)
+        assertEquals("Citation hidden in compact mode to save space", 0f, compactLayout.maxCitationWidthDp, 0.001f)
+        assertEquals(null, compactLayout.headerCenterYDp)
+
+        // 2. Medium (standard 2-row layout)
+        val mediumLayout = com.zekr.widget.widget.render.WidgetLayoutGeometry.compute(
+            widthDp = 340f,
+            heightDp = 120f,
+            density = 2.75f
+        )
+        assertEquals(com.zekr.widget.widget.render.WidgetDisplayMode.MEDIUM, mediumLayout.mode)
+        assertTrue("Medium mode has available text height >= 30dp", mediumLayout.availableTextHeightDp >= 30f)
+        assertTrue("Citation visible in medium mode", mediumLayout.maxCitationWidthDp > 20f)
+        assertEquals(null, mediumLayout.headerCenterYDp)
+
+        // 3. Expanded (generous 3+ rows layout)
+        val expandedLayout = com.zekr.widget.widget.render.WidgetLayoutGeometry.compute(
+            widthDp = 340f,
+            heightDp = 220f,
+            density = 2.75f,
+            hasMultiRep = true
+        )
+        assertEquals(com.zekr.widget.widget.render.WidgetDisplayMode.EXPANDED, expandedLayout.mode)
+        assertTrue("Expanded mode has available text height >= 60dp", expandedLayout.availableTextHeightDp >= 60f)
+        assertNotNull("Header center Y is set in expanded mode", expandedLayout.headerCenterYDp)
+        assertTrue("Citation visible in expanded mode", expandedLayout.maxCitationWidthDp > 20f)
+    }
+
+    @Test
+    fun testDhikrCategorizationRules() {
+        val salawatItem = ZekrEntity(
+            id = 125,
+            arabicText = "اللَّهُمَّ صَلِّ عَلَى مُحَمَّدٍ وَعَلَى آلِ مُحَمَّدٍ",
+            type = ContentType.AUTHENTIC_ZEKR,
+            source = "صحيح البخاري: 3370",
+            reference = "كتاب أحاديث الأنبياء",
+            category = "الصلاة على النبي"
+        )
+        assertEquals(com.zekr.widget.data.repository.DhikrCategory.SALAWAT, ZekrRepository.classifyDhikr(salawatItem))
+
+        val tasbeehItem = ZekrEntity(
+            id = 1,
+            arabicText = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ",
+            type = ContentType.SAHIH_HADITH,
+            source = "صحيح البخاري: 6406",
+            reference = "باب فضل التسبيح",
+            category = "التسبيح والتحميد",
+            repetition = 100
+        )
+        assertEquals(com.zekr.widget.data.repository.DhikrCategory.TASBEEH, ZekrRepository.classifyDhikr(tasbeehItem))
+
+        val quranItem = ZekrEntity(
+            id = 2,
+            arabicText = "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ",
+            type = ContentType.QURAN_AYAH,
+            source = "سورة البقرة: 255",
+            reference = "آية الكرسي",
+            category = "آيات الحفظ"
+        )
+        assertEquals(com.zekr.widget.data.repository.DhikrCategory.WIRD, ZekrRepository.classifyDhikr(quranItem))
+
+        val generalDua = ZekrEntity(
+            id = 30,
+            arabicText = "رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الآخِرَةِ حَسَنَةً",
+            type = ContentType.AUTHENTIC_ZEKR,
+            source = "صحيح مسلم: 2690",
+            reference = "كتاب الذكر والدعاء",
+            category = "جوامع الدعاء"
+        )
+        assertEquals(com.zekr.widget.data.repository.DhikrCategory.GENERAL, ZekrRepository.classifyDhikr(generalDua))
+        assertEquals(
+            com.zekr.widget.data.repository.DhikrCategory.GENERAL,
+            ZekrRepository.classifyDhikr(generalDua.copy(category = "كنوز الجنة"))
+        )
+    }
+
+    @Test
+    fun testSelectNextForCategoryNeverMixesCategories() {
+        val testPool = listOf(
+            ZekrEntity(1, "اللهم صل على محمد", ContentType.AUTHENTIC_ZEKR, "Bukhari", "Ref", "الصلاة على النبي"),
+            ZekrEntity(2, "اللهم صل وسلم على نبينا محمد", ContentType.AUTHENTIC_ZEKR, "Tirmidhi", "Ref", "الصلاة على النبي"),
+            ZekrEntity(3, "سبحان الله وبحمده", ContentType.AUTHENTIC_ZEKR, "Bukhari", "Ref", "التسبيح والتحميد"),
+            ZekrEntity(4, "الحمد لله رب العالمين", ContentType.AUTHENTIC_ZEKR, "Muslim", "Ref", "التسبيح والتحميد"),
+            ZekrEntity(5, "أستغفر الله وأتوب إليه", ContentType.AUTHENTIC_ZEKR, "Bukhari", "Ref", "الاستغفار")
+        )
+
+        // Salawat selection
+        var seen = emptySet<Int>()
+        for (i in 1..4) {
+            val res = ZekrRepository.selectNextForCategory(
+                allItems = testPool,
+                category = com.zekr.widget.data.repository.DhikrCategory.SALAWAT,
+                seenIds = seen
+            )
+            assertTrue("Must pick Salawat formula", res.item.id == 1 || res.item.id == 2)
+            seen = res.updatedSeenIds
+        }
+
+        // Tasbeeh selection
+        seen = emptySet()
+        for (i in 1..4) {
+            val res = ZekrRepository.selectNextForCategory(
+                allItems = testPool,
+                category = com.zekr.widget.data.repository.DhikrCategory.TASBEEH,
+                seenIds = seen
+            )
+            assertTrue("Must pick Tasbeeh formula", res.item.id == 3 || res.item.id == 4)
+            seen = res.updatedSeenIds
+        }
+    }
+
+    @Test
+    fun testGoalRecordedOnceOnlyOnSubsequentTaps() {
+        var stats = WirdStats()
+        // Tap 1 to 32 on a target 33 zekr: completedItem = false
+        for (i in 1..32) {
+            stats = stats.withRecordedTap(itemType = ContentType.AUTHENTIC_ZEKR, completedItem = false)
+        }
+        assertEquals(32, stats.todayRecord().totalTasbihTaps)
+        assertEquals(0, stats.todayRecord().completedCount)
+
+        // Tap 33: First time reaching target -> completedItem = true
+        stats = stats.withRecordedTap(itemType = ContentType.AUTHENTIC_ZEKR, completedItem = true)
+        assertEquals(33, stats.todayRecord().totalTasbihTaps)
+        assertEquals(1, stats.todayRecord().completedCount)
+
+        // Subsequent taps in same session (tap 34, 35, 36) -> completedItem = false!
+        for (i in 34..36) {
+            stats = stats.withRecordedTap(itemType = ContentType.AUTHENTIC_ZEKR, completedItem = false)
+        }
+        assertEquals(36, stats.todayRecord().totalTasbihTaps)
+        assertEquals(1, stats.todayRecord().completedCount) // Still exactly 1! Never duplicated!
+
+        // Undo tap: if count drops below target and completion was recorded, revoking completion
+        stats = stats.withUndoneTap(itemType = ContentType.AUTHENTIC_ZEKR, uncompletedItem = true)
+        assertEquals(35, stats.todayRecord().totalTasbihTaps)
+        assertEquals(0, stats.todayRecord().completedCount)
     }
 }

@@ -33,7 +33,6 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
@@ -50,6 +49,7 @@ import com.zekr.widget.data.preferences.WidgetPreferencesRepository
 import com.zekr.widget.data.preferences.WidgetSettings
 import com.zekr.widget.data.repository.ZekrRepository
 import com.zekr.widget.widget.render.GlassRenderer
+import com.zekr.widget.widget.render.WidgetDisplayMode
 import com.zekr.widget.widget.render.WidgetLayout
 import com.zekr.widget.widget.render.WidgetLayoutGeometry
 import kotlin.math.roundToInt
@@ -305,68 +305,55 @@ class ZekrGlanceWidget : GlanceAppWidget() {
             val isRtl = appContext.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
 
             val tasbeehIntent = Intent(appContext, TasbeehDialogActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                action = "com.zekr.widget.OPEN_TASBEEH.${item.id}"
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra(TasbeehDialogActivity.EXTRA_ZEKR_ID, item.id)
             }
-            val tasbeehAction = actionStartActivity(tasbeehIntent)
-
+            val menuIntent = Intent(appContext, WidgetMenuActivity::class.java).apply {
+                action = "com.zekr.widget.OPEN_WIDGET_MENU.${item.id}"
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(WidgetMenuActivity.EXTRA_ITEM_ID, item.id)
+            }
+            val openWerdIntent = Intent(appContext, com.zekr.widget.MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(com.zekr.widget.MainActivity.EXTRA_NAV_TAB, 0)
+            }
+            val bodyAction = actionRunCallback<TapZekrBodyAction>()
             GlanceTheme {
-                Box(
-                    modifier = GlanceModifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = GlanceModifier.fillMaxSize()) {
                     Image(
                         provider = ImageProvider(fullWidgetBitmap),
-                        contentDescription = "Zekr Widget",
+                        contentDescription = null,
                         contentScale = ContentScale.FillBounds,
                         modifier = GlanceModifier.fillMaxSize()
                     )
-
-                    if (layout.showInteractiveBar) {
+                    if (layout.mode == WidgetDisplayMode.COMPACT) {
+                        CompactTouchRow(
+                            isRtl = isRtl,
+                            layout = layout,
+                            menu = actionStartActivity(menuIntent),
+                            tasbeeh = actionStartActivity(tasbeehIntent),
+                            body = bodyAction,
+                            arabicText = item.arabicText
+                        )
+                    } else {
                         Column(modifier = GlanceModifier.fillMaxSize()) {
-                            // Main Body Zone: Tap to advance / shuffle to next zekr
-                            Box(
-                                modifier = GlanceModifier
-                                    .fillMaxWidth()
-                                    .defaultWeight()
-                                    .clickable(actionRunCallback<TapZekrBodyAction>())
-                            ) {}
-
-                            // Dedicated Masbaha Button Zone when zekr has repetition
-                            if (item.repetition > 1) {
-                                Row(
-                                    modifier = GlanceModifier
-                                        .fillMaxWidth()
-                                        .height(layout.pillHeightDp.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = GlanceModifier
-                                            .width(layout.pillWidthDp.dp)
-                                            .fillMaxHeight()
-                                            .clickable(tasbeehAction)
-                                    ) {}
-                                }
-                                Spacer(modifier = GlanceModifier.height(4.dp))
-                            }
-
-                            // Bottom Action Bar Zone with the 3 buttons
+                            Image(
+                                provider = ImageProvider(com.zekr.widget.R.drawable.widget_touch_surface),
+                                contentDescription = "${item.arabicText}، تغيير الذكر",
+                                modifier = GlanceModifier.fillMaxWidth().defaultWeight().clickable(bodyAction)
+                            )
                             BottomTouchBar(
                                 isRtl = isRtl,
                                 layout = layout,
-                                tasbeehAction = tasbeehAction
+                                menu = actionStartActivity(menuIntent),
+                                tasbeeh = actionStartActivity(tasbeehIntent),
+                                openWerd = actionStartActivity(openWerdIntent),
+                                body = bodyAction
                             )
-
-                            Spacer(modifier = GlanceModifier.height(layout.bottomMarginDp.dp))
+                            Box(GlanceModifier.fillMaxWidth().height(layout.bottomMarginDp.dp).clickable(bodyAction)) {}
                         }
-                    } else {
-                        // Compact Widget Fallback: single tap anywhere advances to next
-                        Box(
-                            modifier = GlanceModifier
-                                .fillMaxSize()
-                                .clickable(actionRunCallback<TapZekrBodyAction>())
-                        ) {}
                     }
                 }
             }
@@ -375,80 +362,87 @@ class ZekrGlanceWidget : GlanceAppWidget() {
 }
 
 @Composable
+private fun CompactTouchRow(
+    isRtl: Boolean,
+    layout: WidgetLayout,
+    menu: Action,
+    tasbeeh: Action,
+    body: Action,
+    arabicText: String
+) {
+    Row(
+        modifier = GlanceModifier.fillMaxSize(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val button = GlanceModifier.width(layout.buttonTouchSizeDp.dp).fillMaxHeight()
+        val margin = GlanceModifier.width(layout.rightMarginDp.dp).fillMaxHeight().clickable(body)
+        val gap = GlanceModifier.width(10.dp).fillMaxHeight().clickable(body)
+        if (isRtl) {
+            Box(margin) {}
+            WidgetTouchTarget("افتح السبحة", button, tasbeeh)
+            Box(gap) {}
+            Image(
+                provider = ImageProvider(com.zekr.widget.R.drawable.widget_touch_surface),
+                contentDescription = "$arabicText، تغيير الذكر",
+                modifier = GlanceModifier.defaultWeight().fillMaxHeight().clickable(body)
+            )
+            Box(gap) {}
+            WidgetTouchTarget("قائمة الذكر", button, menu)
+            Box(margin) {}
+        } else {
+            Box(margin) {}
+            WidgetTouchTarget("قائمة الذكر", button, menu)
+            Box(gap) {}
+            Image(
+                provider = ImageProvider(com.zekr.widget.R.drawable.widget_touch_surface),
+                contentDescription = "$arabicText، تغيير الذكر",
+                modifier = GlanceModifier.defaultWeight().fillMaxHeight().clickable(body)
+            )
+            Box(gap) {}
+            WidgetTouchTarget("افتح السبحة", button, tasbeeh)
+            Box(margin) {}
+        }
+    }
+}
+
+@Composable
 private fun BottomTouchBar(
     isRtl: Boolean,
     layout: WidgetLayout,
-    tasbeehAction: Action
+    menu: Action,
+    tasbeeh: Action,
+    openWerd: Action,
+    body: Action
 ) {
-    Row(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .height(layout.barHeightDp.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(GlanceModifier.fillMaxWidth().height(layout.barHeightDp.dp)) {
+        val margin = GlanceModifier.width(layout.rightMarginDp.dp).fillMaxHeight().clickable(body)
+        val rest = GlanceModifier.defaultWeight().fillMaxHeight().clickable(body)
+        val button = GlanceModifier.width(layout.buttonTouchSizeDp.dp).fillMaxHeight()
         if (isRtl) {
-            // In RTL, child 0 is on the RIGHT side: [Margin, Favorite, Share, Tasbeeh, Body]
-            Spacer(modifier = GlanceModifier.width(layout.rightMarginDp.dp))
-            // 1. Favorite (Rightmost)
-            Box(
-                modifier = GlanceModifier
-                    .width(layout.buttonTouchSizeDp.dp)
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<ToggleFavoriteWidgetAction>())
-            ) {}
-            // 2. Share (Middle)
-            Box(
-                modifier = GlanceModifier
-                    .width(layout.buttonTouchSizeDp.dp)
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<ShareWidgetAction>())
-            ) {}
-            // 3. Tasbeeh (Leftmost of the 3 buttons)
-            Box(
-                modifier = GlanceModifier
-                    .width(layout.buttonTouchSizeDp.dp)
-                    .fillMaxHeight()
-                    .clickable(tasbeehAction)
-            ) {}
-            // Space for citation and body touch on the left
-            Box(
-                modifier = GlanceModifier
-                    .defaultWeight()
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<TapZekrBodyAction>())
-            ) {}
+            Box(margin) {}
+            WidgetTouchTarget("قائمة الذكر", button, menu)
+            WidgetTouchTarget("افتح السبحة", button, tasbeeh)
+            Box(rest) {}
+            WidgetTouchTarget("فتح وِرد", button, openWerd)
+            Box(margin) {}
         } else {
-            // In LTR, child 0 is on the LEFT side: [Body, Tasbeeh, Share, Favorite, Margin]
-            Box(
-                modifier = GlanceModifier
-                    .defaultWeight()
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<TapZekrBodyAction>())
-            ) {}
-            // 3. Tasbeeh (Leftmost of the 3 buttons)
-            Box(
-                modifier = GlanceModifier
-                    .width(layout.buttonTouchSizeDp.dp)
-                    .fillMaxHeight()
-                    .clickable(tasbeehAction)
-            ) {}
-            // 2. Share (Middle)
-            Box(
-                modifier = GlanceModifier
-                    .width(layout.buttonTouchSizeDp.dp)
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<ShareWidgetAction>())
-            ) {}
-            // 1. Favorite (Rightmost)
-            Box(
-                modifier = GlanceModifier
-                    .width(layout.buttonTouchSizeDp.dp)
-                    .fillMaxHeight()
-                    .clickable(actionRunCallback<ToggleFavoriteWidgetAction>())
-            ) {}
-            Spacer(modifier = GlanceModifier.width(layout.rightMarginDp.dp))
+            Box(margin) {}
+            WidgetTouchTarget("فتح وِرد", button, openWerd)
+            Box(rest) {}
+            WidgetTouchTarget("افتح السبحة", button, tasbeeh)
+            WidgetTouchTarget("قائمة الذكر", button, menu)
+            Box(margin) {}
         }
     }
+}
+
+@Composable
+private fun WidgetTouchTarget(label: String, modifier: GlanceModifier, action: Action) {
+    Image(
+        provider = ImageProvider(com.zekr.widget.R.drawable.widget_touch_surface),
+        contentDescription = label,
+        modifier = modifier.clickable(action)
+    )
 }
 
 private const val MAX_WIDGET_BITMAP_PIXELS = 700_000L

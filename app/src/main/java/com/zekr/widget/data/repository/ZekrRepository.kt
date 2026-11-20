@@ -15,6 +15,17 @@ enum class TimePeriod {
     NIGHT
 }
 
+enum class DhikrCategory(val id: String) {
+    SALAWAT("salawat"),
+    TASBEEH("tasbeeh"),
+    GENERAL("general"),
+    WIRD("wird");
+
+    companion object {
+        fun fromId(id: String?): DhikrCategory? = values().find { it.id == id }
+    }
+}
+
 data class NextZekrResult(
     val item: ZekrEntity,
     val updatedSeenIds: Set<Int>
@@ -104,6 +115,58 @@ object ZekrRepository {
             TimePeriod.NIGHT -> item.category == CATEGORY_MORNING_ONLY ||
                 item.category == CATEGORY_EVENING_ONLY
         }
+    }
+
+    fun classifyDhikr(item: ZekrEntity): DhikrCategory {
+        if (item.type == ContentType.QURAN_AYAH) return DhikrCategory.WIRD
+        val formula = normalizeArabicForSearch(item.getEffectiveTasbeehText())
+        val category = item.category
+        if (category.contains("الصلاة على النبي") || formula.startsWith("اللهم صل")) {
+            return DhikrCategory.SALAWAT
+        }
+        if (category.contains("التسبيح") || category == "الباقيات الصالحات" ||
+            listOf("سبحان الله", "الحمد لله", "لا اله الا الله", "الله اكبر", "لا حول ولا قوة الا بالله")
+                .any { phrase -> phrase in formula }
+        ) {
+            return DhikrCategory.TASBEEH
+        }
+        return DhikrCategory.GENERAL
+    }
+
+
+    fun selectNextForCategory(
+        allItems: List<ZekrEntity>,
+        category: DhikrCategory,
+        seenIds: Set<Int> = emptySet(),
+        currentId: Int? = null,
+        random: Random = Random.Default
+    ): NextZekrResult {
+        val pool = allItems.filter { classifyDhikr(it) == category }
+            .ifEmpty { allItems.filter { it.type != ContentType.QURAN_AYAH } }
+        val poolIds = pool.map { it.id }.toSet()
+        val effectiveSeen = (seenIds intersect poolIds).let {
+            if (currentId != null && currentId in poolIds) it + currentId else it
+        }
+        val unseenCandidates = pool.filter { it.id !in effectiveSeen }
+        val isDeckReset = unseenCandidates.isEmpty()
+
+        val deckCandidates = if (isDeckReset) {
+            if (pool.size > 1 && currentId != null) pool.filter { it.id != currentId } else pool
+        } else {
+            unseenCandidates
+        }
+
+        val baseSeenAfterReset = if (isDeckReset) {
+            if (currentId != null && currentId in poolIds && pool.size > 1) setOf(currentId) else emptySet()
+        } else {
+            effectiveSeen
+        }
+
+        val picked = deckCandidates[random.nextInt(deckCandidates.size)]
+        return NextZekrResult(
+            item = picked,
+            updatedSeenIds = baseSeenAfterReset + picked.id
+        )
     }
 
     /**

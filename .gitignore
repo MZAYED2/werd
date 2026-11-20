@@ -33,3 +33,8 @@ keystore.properties
 /mobile_screen.png
 /test_screen.png
 /Glass Mihrab*.png
+*.mp4
+QA_REPORT/
+ScreenRecorder/
+WERD_QA_REPORT.zip
+

@@ -73,7 +73,17 @@ import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.List
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
@@ -85,6 +95,7 @@ import com.zekr.widget.data.preferences.GlassColorPreset
 import com.zekr.widget.data.preferences.GradientDirection
 import com.zekr.widget.data.preferences.GradientPreset
 import com.zekr.widget.data.preferences.PatternType
+import com.zekr.widget.data.preferences.ReminderType
 import com.zekr.widget.data.preferences.WidgetFont
 import com.zekr.widget.data.preferences.WidgetPreferencesRepository
 import com.zekr.widget.data.preferences.WidgetSettings
@@ -114,20 +125,20 @@ enum class ColorPickerTarget {
     GRADIENT_END
 }
 
-private val TABS = listOf(
-    "النقوش",
-    "الزجاج والألوان",
-    "الخط",
-    "المكتبة",
-    "الوِرد اليومي",
-    "الإعدادات"
-)
+private val TABS = listOf("النقوش", "الألوان", "الخط")
+
+private enum class Destination(val title: String) {
+    Home("الرئيسية"), Library("المكتبة"), Tasbeeh("السبحة"), Audio("الصوتيات"), Wird("الورد"),
+    Studio("استوديو الويدجت"), Settings("الإعدادات")
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     isWidgetConfigMode: Boolean = false,
     widgetId: Int = -1,
+    initialTab: Int = 0,
+    onInitialTabHandled: () -> Unit = {},
     onSaveAndClose: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -142,6 +153,36 @@ fun HomeScreen(
     val customItems by (prefRepo?.customItemsFlow ?: remember { flowOf(emptyList()) }).collectAsState(initial = emptyList())
     val wirdStats by (prefRepo?.wirdStatsFlow ?: remember { flowOf(WirdStats()) }).collectAsState(initial = WirdStats())
     val notifSettings by (prefRepo?.notificationSettingsFlow ?: remember { flowOf(com.zekr.widget.data.preferences.NotificationSettings()) }).collectAsState(initial = com.zekr.widget.data.preferences.NotificationSettings())
+    val hasPromptedPermissions by (prefRepo?.hasPromptedPermissionsFlow ?: remember { flowOf(true) }).collectAsState(initial = true)
+    var showPermissionsIntro by remember { mutableStateOf(false) }
+
+    LaunchedEffect(hasPromptedPermissions) {
+        if (!hasPromptedPermissions) {
+            val hasNotif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else true
+            val hasOverlay = Settings.canDrawOverlays(context)
+            if (hasNotif && hasOverlay) {
+                prefRepo?.setPromptedPermissions(true)
+            } else {
+                showPermissionsIntro = true
+            }
+        }
+    }
+
+    if (showPermissionsIntro) {
+        PermissionsIntroDialog(
+            onDismiss = {
+                showPermissionsIntro = false
+                scope.launch {
+                    prefRepo?.setPromptedPermissions(true)
+                }
+            }
+        )
+    }
 
     var hasNotificationPermission by remember {
         mutableStateOf(
@@ -239,8 +280,34 @@ fun HomeScreen(
         ZekrRepository.getById(context, previewItemId, customItems)
     }
 
-    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
-    var selectedBottomNav by rememberSaveable { mutableIntStateOf(0) }
+    var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, 2)) }
+    var destination by rememberSaveable {
+        mutableStateOf(if (isWidgetConfigMode) Destination.Studio else Destination.Home)
+    }
+    var openGuidedQuran by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(initialTab) {
+        if (!isWidgetConfigMode) {
+            when (initialTab) {
+                0 -> destination = Destination.Home
+                1 -> destination = Destination.Library
+                2 -> destination = Destination.Tasbeeh
+                3 -> destination = Destination.Audio
+                4 -> destination = Destination.Wird
+                5 -> destination = Destination.Settings
+                com.zekr.widget.MainActivity.NAV_GUIDED_QURAN -> {
+                    openGuidedQuran = true
+                    destination = Destination.Wird
+                }
+            }
+            if (initialTab in 1..com.zekr.widget.MainActivity.NAV_GUIDED_QURAN) onInitialTabHandled()
+        }
+    }
+    var settingsOrigin by rememberSaveable { mutableStateOf(Destination.Home) }
+    BackHandler(!isWidgetConfigMode && destination != Destination.Home) {
+        destination = if (destination == Destination.Settings) settingsOrigin else Destination.Home
+    }
+    val screenState = rememberSaveableStateHolder()
+    val demoPlayback = rememberDemoPlayback()
     var colorPickerTarget by remember { mutableStateOf(ColorPickerTarget.NONE) }
 
     val currentVersionName = remember(isPreview) {
@@ -340,46 +407,18 @@ fun HomeScreen(
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Scaffold(
-            containerColor = Color(0xFF0F1115),
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 CenterAlignedTopAppBar(
                     title = {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = "ورد",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 22.sp,
-                                    letterSpacing = 1.sp,
-                                    color = Color(0xFFF2F4F7)
-                                )
-                                if (isWidgetConfigMode) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color(0xFF10B981).copy(alpha = 0.18f))
-                                            .border(1.dp, Color(0xFF10B981).copy(alpha = 0.35f), RoundedCornerShape(6.dp))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    ) {
-                                        Text(
-                                            text = if (widgetId > 0) "إعدادات الويدجت #$widgetId" else "إعدادات الويدجت",
-                                            color = Color(0xFF6EE7B7),
-                                            fontSize = 9.5.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "استوديو الويدجت الإسلامي",
-                                fontSize = 11.sp,
-                                color = Color(0xFFB4BAC6)
+                                if (destination == Destination.Home) "وِرد" else destination.title,
+                                fontWeight = FontWeight.Bold
                             )
+                            if (destination == Destination.Home) {
+                                Text("مساحة هادئة للذكر", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     },
                     actions = {
@@ -403,133 +442,70 @@ fun HomeScreen(
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF10B981),
-                                    contentColor = Color.White
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
                                 ),
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.padding(end = 8.dp)
                             ) {
                                 Text("تم وحفظ ✓", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
                             }
-                        } else {
-                            val todayCompleted = wirdStats.todayRecord().completedCount
-                            val goal = wirdStats.dailyGoal.coerceAtLeast(1)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                                modifier = Modifier.padding(end = 10.dp)
-                            ) {
-                                // Daily Wird Progress Pill
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(Color(0xFF10B981).copy(alpha = 0.14f))
-                                        .border(
-                                            1.dp,
-                                            Color(0xFF10B981).copy(alpha = 0.42f),
-                                            RoundedCornerShape(14.dp)
-                                        )
-                                        .clickable { selectedTabIndex = 4 }
-                                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier.size(8.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Canvas(modifier = Modifier.fillMaxSize()) {
-                                            drawCircle(color = Color(0xFF34D399))
-                                        }
-                                    }
-                                    Text(
-                                        text = "${ZekrRepository.toArabicDigits(todayCompleted)}/${ZekrRepository.toArabicDigits(goal)}",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF6EE7B7)
-                                    )
-                                }
+                        } else if (destination != Destination.Settings) {
+                            IconButton(onClick = {
+                                settingsOrigin = destination
+                                destination = Destination.Settings
+                            }) {
+                                Icon(Icons.Outlined.Settings, contentDescription = "الإعدادات")
                             }
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color(0xFF0F1115),
-                        titleContentColor = Color(0xFFF2F4F7),
-                        actionIconContentColor = Color(0xFFF2F4F7)
+                        containerColor = MaterialTheme.colorScheme.background
                     )
                 )
             },
             bottomBar = {
-                NavigationBar(
-                    containerColor = Color(0xFF14181F),
-                    contentColor = Color(0xFFF2F4F7),
-                    tonalElevation = 8.dp
-                ) {
-                    NavigationBarItem(
-                        selected = selectedBottomNav == 0,
-                        onClick = { selectedBottomNav = 0 },
-                        icon = {
-                            Text(
-                                text = "📱",
-                                fontSize = 18.sp
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = "الويدجت",
-                                fontWeight = if (selectedBottomNav == 0) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 12.sp
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF10B981),
-                            selectedTextColor = Color(0xFF10B981),
-                            unselectedIconColor = Color(0xFF8B95A5),
-                            unselectedTextColor = Color(0xFF8B95A5),
-                            indicatorColor = Color(0xFF10B981).copy(alpha = 0.20f)
-                        )
-                    )
-                    NavigationBarItem(
-                        selected = selectedBottomNav == 1,
-                        onClick = { selectedBottomNav = 1 },
-                        icon = {
-                            Text(
-                                text = "📿",
-                                fontSize = 18.sp
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = "السبحة",
-                                fontWeight = if (selectedBottomNav == 1) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 12.sp
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF10B981),
-                            selectedTextColor = Color(0xFF10B981),
-                            unselectedIconColor = Color(0xFF8B95A5),
-                            unselectedTextColor = Color(0xFF8B95A5),
-                            indicatorColor = Color(0xFF10B981).copy(alpha = 0.20f)
-                        )
-                    )
+                if (!isWidgetConfigMode) {
+                    Column {
+                        if (destination != Destination.Audio && demoPlayback?.engaged == true) {
+                            AudioMiniPlayer(demoPlayback) { destination = Destination.Audio }
+                        }
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                            listOf(Destination.Home, Destination.Library, Destination.Tasbeeh, Destination.Audio, Destination.Wird)
+                                .forEach { section ->
+                                    NavigationBarItem(
+                                        selected = destination == section,
+                                        onClick = { destination = section },
+                                        icon = {
+                                            val iconSize = Modifier.size(28.dp)
+                                            when (section) {
+                                                Destination.Home -> Icon(Icons.Outlined.Home, null, iconSize)
+                                                Destination.Library -> Icon(Icons.Outlined.List, null, iconSize)
+                                                Destination.Audio -> Icon(Icons.Outlined.PlayArrow, null, iconSize)
+                                                Destination.Wird -> Icon(Icons.Outlined.DateRange, null, iconSize)
+                                                else -> TasbeehNavIcon(28.dp)
+                                            }
+                                        },
+                                        label = {
+                                            Text(section.title, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                        }
+                                    )
+                                }
+                        }
+                    }
                 }
             }
         ) { innerPadding ->
-            Crossfade(
-                targetState = selectedBottomNav,
-                animationSpec = tween(durationMillis = 200),
-                label = "bottom_nav_crossfade",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) { currentNavTab ->
-                if (currentNavTab == 0) {
+            Box(Modifier.fillMaxSize().padding(innerPadding)) {
+                screenState.SaveableStateProvider(destination.name) {
+                    if (destination != Destination.Tasbeeh) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxSize()
+                        modifier = Modifier.fillMaxSize().then(
+                            if (destination == Destination.Home) Modifier.verticalScroll(rememberScrollState())
+                            else Modifier
+                        )
                     ) {
-                // Option B: Dismissible Frosted-Glass Update Banner above the Widget Preview
+                if (destination == Destination.Home || destination == Destination.Studio) {
                 val availableUpdate = updateInfo?.takeIf { it.isUpdateAvailable }
                 AnimatedVisibility(
                     visible = availableUpdate != null && !isUpdateBannerDismissed,
@@ -590,7 +566,45 @@ fun HomeScreen(
                         }
                     }
 
-                    LiveGlassWidgetPreview(
+                    if (destination == Destination.Home) {
+                        HomeDhikrCard(
+                            item = currentItem,
+                            favorite = currentItem.id in favoriteIds,
+                            onNext = { shufflePreviewAndWidgets(clearPin = true) },
+                            onFavorite = {
+                                scope.launch {
+                                    prefRepo?.toggleFavorite(currentItem.id)
+                                    ZekrGlanceWidget.updateAllWidgets(context, settings, currentItem.id)
+                                }
+                            },
+                            onShare = {
+                                scope.launch { ZekrShareHelper.shareZekrCard(context, currentItem, settings) }
+                            }
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { destination = Destination.Studio },
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                            ) { Text("تخصيص الويدجت") }
+                            OutlinedButton(
+                                onClick = {
+                                    val manager = context.getSystemService(android.appwidget.AppWidgetManager::class.java)
+                                    val provider = android.content.ComponentName(context, com.zekr.widget.widget.ZekrWidgetReceiver::class.java)
+                                    if (manager?.isRequestPinAppWidgetSupported == true) {
+                                        manager.requestPinAppWidget(provider, null, null)
+                                    } else {
+                                        android.widget.Toast.makeText(context, "أضف الويدجت من قائمة أدوات الشاشة الرئيسية", android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                            ) { Text("إضافة الويدجت") }
+                        }
+                    } else LiveGlassWidgetPreview(
                         currentItem = currentItem,
                         settings = settings,
                         hazeState = hazeState,
@@ -601,7 +615,7 @@ fun HomeScreen(
                             shufflePreviewAndWidgets(clearPin = false)
                         },
                         onOpenTasbeeh = {
-                            selectedBottomNav = 1
+                            if (!isWidgetConfigMode) destination = Destination.Tasbeeh
                         },
                         onToggleFavorite = {
                             if (!isPreview) {
@@ -621,42 +635,17 @@ fun HomeScreen(
                         onSkip = { shufflePreviewAndWidgets(clearPin = true) }
                     )
 
-                    // Pin Widget to Home Screen Button below Preview
-                    Button(
-                        onClick = {
-                            val manager = context.getSystemService(android.appwidget.AppWidgetManager::class.java)
-                            val provider = android.content.ComponentName(context, com.zekr.widget.widget.ZekrWidgetReceiver::class.java)
-                            if (manager?.isRequestPinAppWidgetSupported == true) {
-                                manager.requestPinAppWidget(provider, null, null)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                            .height(44.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141F30)),
-                        border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.55f))
-                    ) {
-                        Text(
-                            text = "➕ إضافة الويدجيت للشاشة الرئيسية",
-                            color = Color(0xFF93C5FD),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Pinned Tab Navigation Bar
-                ScrollableTabRow(
+                }
+                if (destination == Destination.Studio) ScrollableTabRow(
                     selectedTabIndex = selectedTabIndex,
                     edgePadding = 16.dp,
-                    containerColor = Color(0xFF0F1115),
+                    containerColor = MaterialTheme.colorScheme.surface,
                     divider = {
                         HorizontalDivider(
-                            color = Color.White.copy(alpha = 0.08f),
+                            color = MaterialTheme.colorScheme.outlineVariant,
                             thickness = 1.dp
                         )
                     },
@@ -680,21 +669,141 @@ fun HomeScreen(
                                     text = title,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     fontSize = 12.5.sp,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFB4BAC6)
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         )
                     }
                 }
 
-                // R1: Independent Scrolling Tab Content Area
-                Box(
+                if (destination == Destination.Home) {
+                    val todayRec = wirdStats.todayRecord()
+                    val completed = todayRec.completedCount
+                    val goal = wirdStats.dailyGoal.coerceAtLeast(1)
+                    val streak = wirdStats.currentStreak()
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        ModernSectionCard(title = "وِردك اليوم") {
+                            Text(
+                                text = "${ZekrRepository.toArabicDigits(completed)} من ${ZekrRepository.toArabicDigits(goal)} منجز اليوم",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.5.sp
+                            )
+                            LinearProgressIndicator(
+                                progress = { (completed.toFloat() / goal).coerceIn(0f, 1f) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 10.dp)
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (streak > 0) "التتابع الحالي: ${ZekrRepository.toArabicDigits(streak)} أيام 🔥" else "ابدأ تتابعك اليومي",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                TextButton(onClick = { destination = Destination.Wird }) {
+                                    Text("عرض تفاصيل الورد")
+                                }
+                            }
+                        }
+
+                        // Quick Navigation & Snapshot Card
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { destination = Destination.Tasbeeh },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "السبحة",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "${ZekrRepository.toArabicDigits(todayRec.totalTasbihTaps)} تسبيحة",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "انقر للمتابعة",
+                                        fontSize = 10.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { destination = Destination.Library },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "المكتبة",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "${ZekrRepository.toArabicDigits(allItems.size)} ذكراً وآية",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "تصفح وابحث",
+                                        fontSize = 10.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                 ) {
                     Crossfade(
-                        targetState = selectedTabIndex,
+                        targetState = when (destination) {
+                            Destination.Studio -> selectedTabIndex
+                            Destination.Library -> 3
+                            Destination.Wird -> 4
+                            Destination.Settings -> 5
+                            Destination.Audio -> 6
+                            else -> 0
+                        },
                         animationSpec = tween(durationMillis = 180),
                         label = "tab_crossfade"
                     ) { tabIndex ->
@@ -772,6 +881,9 @@ fun HomeScreen(
                             )
                             4 -> DailyWirdTabContent(
                                 stats = wirdStats,
+                                allItems = allItems,
+                                openGuidedQuran = openGuidedQuran,
+                                onGuidedQuranOpened = { openGuidedQuran = false },
                                 onUpdateDailyGoal = { newGoal ->
                                     if (!isPreview) {
                                         scope.launch {
@@ -780,6 +892,7 @@ fun HomeScreen(
                                     }
                                 }
                             )
+                            6 -> AudioWirdScreen(demoPlayback)
                             5 -> SettingsContentTabContent(
                                 settings = settings,
                                 onUpdateSettings = { updateAndSync(it) },
@@ -798,15 +911,9 @@ fun HomeScreen(
                                 onOpenNotificationSettings = {
                                     openNotificationSettings()
                                 },
-                                onTestReminder = {
+                                onTestReminder = { type ->
                                     if (!isPreview) {
-                                        val active = listOfNotNull(
-                                            com.zekr.widget.data.preferences.ReminderType.SALAWAT.takeIf { notifSettings.salawatEnabled },
-                                            com.zekr.widget.data.preferences.ReminderType.TASBEEH.takeIf { notifSettings.tasbeehEnabled },
-                                            com.zekr.widget.data.preferences.ReminderType.WIRD.takeIf { notifSettings.wirdEnabled }
-                                        )
-                                        val target = active.firstOrNull() ?: com.zekr.widget.data.preferences.ReminderType.SALAWAT
-                                        com.zekr.widget.notification.NotificationHelper.showReminder(context, target)
+                                        com.zekr.widget.notification.NotificationHelper.showReminder(context, type)
                                     }
                                 },
                                 currentVersionName = currentVersionName,
@@ -816,6 +923,7 @@ fun HomeScreen(
                                 onCheckForUpdate = { triggerUpdateCheck(resetBannerDismissal = true) },
                                 onOpenUrl = { openExternalUrl(it) }
                             )
+
                         }
                     }
                 }
@@ -823,12 +931,13 @@ fun HomeScreen(
         } else {
             com.zekr.widget.ui.tasbeeh.TasbeehScreen(
                 settings = settings,
-                onBackToStudio = { selectedBottomNav = 0 }
+                onBackToStudio = { destination = Destination.Home }
             )
         }
+                }
+            }
+        }
     }
-}
-}
 
     // Color Picker Dialog Instance
     if (colorPickerTarget != ColorPickerTarget.NONE) {
@@ -1634,7 +1743,7 @@ fun UpdateAvailableGlassBanner(
             .padding(horizontal = 16.dp, vertical = 4.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF162220).copy(alpha = 0.92f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
         border = BorderStroke(
             width = 1.dp,
@@ -1674,13 +1783,13 @@ fun UpdateAvailableGlassBanner(
             ) {
                 Text(
                     text = "يتوفر تحديث جديد لتطبيق ورد ($latestVersion)",
-                    color = Color(0xFFF5F7FA),
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.5.sp
                 )
                 Text(
                     text = "حمّل أحدث نسخة مباشرة من GitHub",
-                    color = Color(0xFFB4BAC6),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
                 )
             }
@@ -1732,7 +1841,7 @@ fun SettingsContentTabContent(
     hasNotificationPermission: Boolean = true,
     onRequestNotificationPermission: () -> Unit = {},
     onOpenNotificationSettings: () -> Unit = {},
-    onTestReminder: () -> Unit = {},
+    onTestReminder: (ReminderType) -> Unit = {},
     currentVersionName: String = "1.1",
     updateInfo: AppUpdateInfo? = null,
     isCheckingUpdate: Boolean = false,
@@ -1745,10 +1854,11 @@ fun SettingsContentTabContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item { WerdAppearanceSettings() }
         item {
             ModernSectionCard(
                 title = "التنبيهات والتذكيرات الذكية",
-                subtitle = "تذكيرات دورية لطيفة مع خيار «تم» لتأكيد الإنجاز و«فتح السبحة»"
+                subtitle = "اضغط على التذكير لفتح وجهته، أو اختر «تم» أو «ذكرني لاحقاً»"
             ) {
                 if (!hasNotificationPermission) {
                     Card(
@@ -1891,7 +2001,30 @@ fun SettingsContentTabContent(
                     )
                 }
 
-                val anyNotifActive = notifSettings.salawatEnabled || notifSettings.tasbeehEnabled || notifSettings.wirdEnabled
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("تذكير بالدعاء")
+                    Switch(
+                        checked = notifSettings.duaEnabled,
+                        onCheckedChange = { onUpdateNotifSettings(notifSettings.copy(duaEnabled = it)) }
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("تذكيرات آيات وأحاديث وأذكار")
+                    Switch(
+                        checked = notifSettings.contentEnabled,
+                        onCheckedChange = { onUpdateNotifSettings(notifSettings.copy(contentEnabled = it)) }
+                    )
+                }
+                val anyNotifActive = notifSettings.salawatEnabled || notifSettings.tasbeehEnabled ||
+                    notifSettings.wirdEnabled || notifSettings.duaEnabled || notifSettings.contentEnabled
                 if (anyNotifActive) {
                     Spacer(modifier = Modifier.height(14.dp))
                     Row(
@@ -1949,18 +2082,29 @@ fun SettingsContentTabContent(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    OutlinedButton(
-                        onClick = onTestReminder,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f))
-                    ) {
-                        Text(
-                            text = "🔔 تجربة إشعار تذكيري الآن",
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF6EE7B7)
-                        )
+                    var showReminderTypes by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(
+                            onClick = { showReminderTypes = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("تجربة إشعار")
+                        }
+                        DropdownMenu(
+                            expanded = showReminderTypes,
+                            onDismissRequest = { showReminderTypes = false }
+                        ) {
+                            ReminderType.entries.forEach { type ->
+                                val label = type.titleArabic
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        showReminderTypes = false
+                                        onTestReminder(type)
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -2199,12 +2343,12 @@ fun SettingsContentTabContent(
                         .clip(RoundedCornerShape(12.dp))
                         .background(
                             if (isUpdateAvailable) accentGold.copy(alpha = 0.12f)
-                            else Color.White.copy(alpha = 0.04f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         )
                         .border(
                             width = 1.dp,
                             color = if (isUpdateAvailable) accentGold.copy(alpha = 0.45f)
-                            else Color.White.copy(alpha = 0.08f),
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(12.dp)
                         )
                         .padding(12.dp),
@@ -2223,7 +2367,7 @@ fun SettingsContentTabContent(
                             isUpdateAvailable -> accentGold
                             updateError != null -> Color(0xFFFCA5A5)
                             updateInfo != null -> accentEmerald
-                            else -> Color(0xFFE4E7EC)
+                            else -> MaterialTheme.colorScheme.onSurface
                         }
                         Text(
                             text = statusTitle,
@@ -2237,7 +2381,7 @@ fun SettingsContentTabContent(
                             Text(
                                 text = updateInfo.releaseNotes,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFD0D5DD),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 4,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -2302,6 +2446,47 @@ fun SettingsContentTabContent(
         }
 
         item {
+            val context = LocalContext.current
+            val releaseUrl = UpdateChecker.RELEASES_PAGE_URL
+            ModernSectionCard(
+                title = "شارك وِرد مع أصدقائك",
+                subtitle = "رابط أحدث إصدار على GitHub"
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val share = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, "وِرد — مساحة هادئة للذكر\n$releaseUrl")
+                            }
+                            context.startActivity(Intent.createChooser(share, "مشاركة وِرد"))
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("مشاركة الرابط")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            context.getSystemService(android.content.ClipboardManager::class.java)
+                                ?.setPrimaryClip(android.content.ClipData.newPlainText("وِرد", releaseUrl))
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                android.widget.Toast.makeText(
+                                    context, "تم نسخ الرابط", android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("نسخ الرابط")
+                    }
+                }
+            }
+        }
+
+        item {
             var showImportDialog by remember { mutableStateOf(false) }
             var importJsonText by remember { mutableStateOf("") }
             var importStatus by remember { mutableStateOf<String?>(null) }
@@ -2329,9 +2514,9 @@ fun SettingsContentTabContent(
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f))
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                     ) {
-                        Text("📤 نسخ احتياطي", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF6EE7B7))
+                        Text("📤 نسخ احتياطي", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.primary)
                     }
 
                     OutlinedButton(
@@ -2342,9 +2527,9 @@ fun SettingsContentTabContent(
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.20f))
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
-                        Text("📥 استعادة نسخة", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color.White)
+                        Text("📥 استعادة نسخة", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
 
@@ -2354,7 +2539,7 @@ fun SettingsContentTabContent(
                         title = { Text("استعادة النسخة الاحتياطية", fontWeight = FontWeight.Bold) },
                         text = {
                             Column {
-                                Text("الصق كود النسخة الاحتياطية (JSON) المستخرج سابقاً:", fontSize = 13.sp, color = Color.White.copy(alpha = 0.8f))
+                                Text("الصق كود النسخة الاحتياطية (JSON) المستخرج سابقاً:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 OutlinedTextField(
                                     value = importJsonText,
@@ -2401,7 +2586,7 @@ fun SettingsContentTabContent(
                     text = "• تتيح لك شاشة القفل قراءة الذكر والتسبيح بنقرة واحدة سريعة مع اهتزاز تفاعلي دون الحاجة لفتح قفل الهاتف نهائياً.\n• لإضافتها على هواتف سامسونج: اضغط مطولاً على شاشة القفل ثم اختر «إضافة ويدجيت» أسفل الساعة واختر «ورد» (Werd).\n• على الأجهزة التي لا تدعم ويدجيت شاشة القفل من النظام، يمكن إضافة الويدجيت المصغر على الشاشة الرئيسية.",
                     fontSize = 12.sp,
                     lineHeight = 19.sp,
-                    color = Color(0xFFD0D5DD)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -2425,11 +2610,11 @@ fun ModernSectionCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(if (compact) 18.dp else 22.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF16181E)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         border = BorderStroke(
             1.dp,
-            Color.White.copy(alpha = 0.08f)
+            MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Column(
@@ -2441,7 +2626,7 @@ fun ModernSectionCard(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFF2F4F7),
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -2450,7 +2635,7 @@ fun ModernSectionCard(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFB4BAC6),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2481,6 +2666,18 @@ fun LiveGlassWidgetPreview(
 ) {
     val context = LocalContext.current
 
+    var previewModeIndex by rememberSaveable { mutableIntStateOf(1) } // 0: Compact, 1: Medium, 2: Expanded
+    val previewHeight = when (previewModeIndex) {
+        0 -> 108.dp
+        2 -> 270.dp
+        else -> 216.dp
+    }
+    val previewBitmapH = when (previewModeIndex) {
+        0 -> 190
+        2 -> 500
+        else -> 380
+    }
+
     val bitmap: Bitmap = remember(
         settings.colorPreset,
         settings.isGradient,
@@ -2491,11 +2688,12 @@ fun LiveGlassWidgetPreview(
         settings.blurGrade,
         settings.pattern,
         settings.patternOpacity,
-        settings.patternScale
+        settings.patternScale,
+        previewModeIndex
     ) {
         GlassRenderer.createGlassBackgroundBitmap(
             width = 680,
-            height = 380,
+            height = previewBitmapH,
             colorPreset = settings.colorPreset,
             isGradient = settings.isGradient,
             primaryColor = settings.primaryColor,
@@ -2523,14 +2721,32 @@ fun LiveGlassWidgetPreview(
         label = "preview_text_color"
     )
 
-    // Phone Home Screen Wallpaper Container (the backdrop behind the widget)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(216.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(26.dp))
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            listOf("شريط (Compact)", "متوسط (Medium)", "موسع (Expanded)").forEachIndexed { idx, label ->
+                FilterChip(
+                    selected = previewModeIndex == idx,
+                    onClick = { previewModeIndex = idx },
+                    label = { Text(label, fontSize = 11.5.sp) },
+                    modifier = Modifier.padding(horizontal = 3.dp)
+                )
+            }
+        }
+
+        // Phone Home Screen Wallpaper Container (the backdrop behind the widget)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(previewHeight)
+                .clip(RoundedCornerShape(26.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(26.dp))
+        ) {
         // 1. Wallpaper Backdrop
         Box(
             modifier = Modifier
@@ -2674,7 +2890,6 @@ fun LiveGlassWidgetPreview(
                             .clip(RoundedCornerShape(12.dp))
                             .background(animatedTextColor.copy(alpha = 0.16f))
                             .border(1.dp, targetAccentColor.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
-                            .bouncyClickable { onOpenTasbeeh() }
                     ) {
                         Box(
                             modifier = Modifier
@@ -2688,10 +2903,6 @@ fun LiveGlassWidgetPreview(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "📿",
-                                fontSize = 10.sp
-                            )
-                            Text(
                                 text = label,
                                 color = animatedTextColor,
                                 fontFamily = FontHelper.getComposeFontFamily(settings.font),
@@ -2702,74 +2913,51 @@ fun LiveGlassWidgetPreview(
                     }
                 }
 
-                // Interactive Bottom Action Bar: [Favorite, Share, Tasbeeh] --- Citation
+                var showMenu by remember { mutableStateOf(false) }
+                var showDetails by remember { mutableStateOf(false) }
+                if (showDetails) {
+                    AlertDialog(
+                        onDismissRequest = { showDetails = false },
+                        title = { Text("تفاصيل الذكر") },
+                        text = {
+                            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                                Text(currentItem.getFormattedArabicText())
+                                Text(currentItem.getConciseCitation(), modifier = Modifier.padding(top = 8.dp))
+                            }
+                        },
+                        confirmButton = { TextButton(onClick = { showDetails = false }) { Text("إغلاق") } }
+                    )
+                }
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(34.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isFavorite) Color(0xFFFF5C7A).copy(alpha = 0.26f)
-                                    else animatedTextColor.copy(alpha = 0.14f)
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isFavorite) Color(0xFFFF768E).copy(alpha = 0.6f)
-                                    else animatedTextColor.copy(alpha = 0.22f),
-                                    CircleShape
-                                )
-                                .clickable { onToggleFavorite() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                                contentDescription = "المفضلة",
-                                tint = if (isFavorite) Color(0xFFFF6B86) else animatedTextColor.copy(alpha = 0.9f),
-                                modifier = Modifier.size(15.dp)
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Outlined.Menu, contentDescription = "قائمة الذكر", tint = animatedTextColor)
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("عرض النص الكامل") },
+                                onClick = { showMenu = false; showDetails = true }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (isFavorite) "إزالة من المفضلة" else "إضافة إلى المفضلة") },
+                                onClick = { showMenu = false; onToggleFavorite() }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("مشاركة الذكر") },
+                                onClick = { showMenu = false; onShare() }
                             )
                         }
-
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(animatedTextColor.copy(alpha = 0.14f))
-                                .border(1.dp, animatedTextColor.copy(alpha = 0.22f), CircleShape)
-                                .clickable { onShare() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Share,
-                                contentDescription = "مشاركة",
-                                tint = animatedTextColor.copy(alpha = 0.9f),
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(targetAccentColor.copy(alpha = 0.20f))
-                                .border(1.dp, targetAccentColor.copy(alpha = 0.50f), CircleShape)
-                                .clickable { onOpenTasbeeh() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "📿",
-                                fontSize = 13.sp
-                            )
-                        }
+                    }
+                    IconButton(onClick = onOpenTasbeeh) {
+                        Icon(
+                            painter = painterResource(com.zekr.widget.R.drawable.ic_werd_reminder),
+                            contentDescription = "افتح السبحة",
+                            tint = targetAccentColor
+                        )
                     }
 
                     Text(
@@ -2787,6 +2975,7 @@ fun LiveGlassWidgetPreview(
                 }
             }
         }
+    }
     }
 }
 

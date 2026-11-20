@@ -7,12 +7,23 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.core.view.WindowCompat
+import com.zekr.widget.ui.theme.rememberWerdAppearance
+import com.zekr.widget.ui.theme.rememberWerdDarkTheme
 import com.zekr.widget.ui.screens.HomeScreen
 import com.zekr.widget.ui.theme.ZekrWidgetTheme
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        const val EXTRA_NAV_TAB = "extra_nav_tab"
+        const val NAV_GUIDED_QURAN = 6
+    }
+
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    private val targetTab = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +35,10 @@ class MainActivity : ComponentActivity() {
                 AppWidgetManager.EXTRA_APPWIDGET_ID,
                 AppWidgetManager.INVALID_APPWIDGET_ID
             )
+            val tab = it.getInt(EXTRA_NAV_TAB, -1)
+            if (tab >= 0 && savedInstanceState == null) {
+                targetTab.intValue = tab
+            }
         }
 
         val isWidgetConfigMode = appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID
@@ -34,10 +49,20 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            ZekrWidgetTheme(darkTheme = true, dynamicColor = false) {
+            val appearance = rememberWerdAppearance().value
+            val darkTheme = rememberWerdDarkTheme(appearance)
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !darkTheme
+                    isAppearanceLightNavigationBars = !darkTheme
+                }
+            }
+            ZekrWidgetTheme(darkTheme = darkTheme, accent = appearance.accent) {
                 HomeScreen(
                     isWidgetConfigMode = isWidgetConfigMode,
                     widgetId = appWidgetId,
+                    initialTab = targetTab.intValue,
+                    onInitialTabHandled = { targetTab.intValue = 0 },
                     onSaveAndClose = {
                         if (isWidgetConfigMode) {
                             val resultValue = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -47,6 +72,15 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val tab = intent.getIntExtra(EXTRA_NAV_TAB, -1)
+        if (tab >= 0) {
+            targetTab.intValue = tab
         }
     }
 }

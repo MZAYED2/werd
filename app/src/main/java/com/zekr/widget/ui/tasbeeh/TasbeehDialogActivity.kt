@@ -25,17 +25,24 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import com.zekr.widget.ui.screens.TasbeehNavIcon
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -67,42 +74,86 @@ import com.zekr.widget.widget.render.PatternDrawables
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
+import android.content.Intent
+import android.provider.Settings
+import androidx.core.content.ContextCompat
+import com.zekr.widget.service.FloatingTasbeehService
+
+private enum class TasbeehFilter(val title: String, val phrase: String? = null) {
+    Selected("أذكار مختارة"),
+    Tasbeeh("تسبيح", "سبحان الله"),
+    Istighfar("استغفار", "استغفر"),
+    Tahmeed("تحميد", "الحمد لله"),
+    Tahleel("تهليل", "لا اله الا الله"),
+    Takbeer("تكبير", "الله اكبر"),
+    Salawat("الصلاة على النبي"),
+    Favorites("المفضلة"),
+    Custom("الأذكار المخصصة");
+
+    fun includes(item: ZekrEntity, favorites: Set<Int>): Boolean {
+        if (item.type == ContentType.QURAN_AYAH) return false
+        if (phrase != null) {
+            return ZekrRepository.normalizeArabicForSearch(item.getEffectiveTasbeehText()).contains(phrase)
+        }
+        return when (this) {
+            Salawat -> ZekrRepository.classifyDhikr(item).id == "salawat"
+            Favorites -> item.id in favorites
+            Custom -> item.isCustom
+            else -> !item.isCustom && (item.tasbeehText != null || item.type == ContentType.AUTHENTIC_ZEKR)
+        }
+    }
+}
+
 class TasbeehDialogActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_ZEKR_ID = "extra_zekr_id"
+        const val EXTRA_REMINDER_CATEGORY = "extra_reminder_category"
+        const val EXTRA_FORCE_DIALOG = "extra_force_dialog"
+    }
+
+    private val zekrIdState = mutableIntStateOf(-1)
+    private val reminderCategoryState = mutableStateOf<String?>(null)
+
+    private fun handleIntent(targetIntent: Intent): Boolean {
+        val zekrId = targetIntent.getIntExtra(EXTRA_ZEKR_ID, -1)
+        val forceDialog = targetIntent.getBooleanExtra(EXTRA_FORCE_DIALOG, false)
+        if (!forceDialog && Settings.canDrawOverlays(this) && zekrId > 0) {
+            val serviceIntent = Intent(this, FloatingTasbeehService::class.java).apply {
+                putExtra(FloatingTasbeehService.EXTRA_ITEM_ID, zekrId)
+            }
+            ContextCompat.startForegroundService(this, serviceIntent)
+            finish()
+            return true
+        }
+        zekrIdState.intValue = zekrId
+        reminderCategoryState.value = targetIntent.getStringExtra(EXTRA_REMINDER_CATEGORY)
+        return false
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (handleIntent(intent)) return
+
         window.setBackgroundDrawableResource(android.R.color.transparent)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
 
-        val initialZekrId = intent.getIntExtra(EXTRA_ZEKR_ID, -1)
-
         setContent {
             ZekrWidgetTheme(darkTheme = true, dynamicColor = false) {
                 TasbeehDialogScreen(
-                    initialZekrId = initialZekrId,
+                    initialZekrId = zekrIdState.intValue,
+                    reminderCategory = reminderCategoryState.value,
                     onDismiss = { finish() }
                 )
             }
         }
     }
 
-    override fun onNewIntent(intent: android.content.Intent) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val initialZekrId = intent.getIntExtra(EXTRA_ZEKR_ID, -1)
-        setContent {
-            ZekrWidgetTheme(darkTheme = true, dynamicColor = false) {
-                TasbeehDialogScreen(
-                    initialZekrId = initialZekrId,
-                    onDismiss = { finish() }
-                )
-            }
-        }
+        handleIntent(intent)
     }
 }
 
@@ -115,6 +166,7 @@ class TasbeehDialogActivity : ComponentActivity() {
 @Composable
 fun TasbeehDialogScreen(
     initialZekrId: Int = -1,
+    reminderCategory: String? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -161,6 +213,7 @@ fun TasbeehDialogScreen(
         ) {
             TasbeehViewContent(
                 initialZekrId = initialZekrId,
+                reminderCategory = reminderCategory,
                 isDialog = true,
                 dialogSize = dialogSize,
                 cardOpacity = cardOpacity,
@@ -189,11 +242,12 @@ fun TasbeehScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F1115)),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.TopCenter
     ) {
         TasbeehViewContent(
             initialZekrId = -1,
+            reminderCategory = null,
             isDialog = false,
             dialogSize = TasbeehDialogSize.LARGE,
             cardOpacity = cardOpacity,
@@ -206,6 +260,7 @@ fun TasbeehScreen(
 @Composable
 private fun TasbeehViewContent(
     initialZekrId: Int = -1,
+    reminderCategory: String? = null,
     isDialog: Boolean = true,
     dialogSize: TasbeehDialogSize = TasbeehDialogSize.COMPACT,
     cardOpacity: Float = 0.94f,
@@ -232,6 +287,18 @@ private fun TasbeehViewContent(
     var customTargetInput by remember { mutableStateOf("") }
     var showVirtueInfoDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
+    var filter by rememberSaveable { mutableStateOf(TasbeehFilter.Selected) }
+    var showFilters by remember { mutableStateOf(false) }
+    var showDhikrPicker by remember { mutableStateOf(false) }
+    var showAdvanced by remember { mutableStateOf(false) }
+    var confirmResetAll by remember { mutableStateOf(false) }
+    var switching by remember { mutableStateOf(false) }
+    val customItems by prefRepo.customItemsFlow.collectAsState(initial = emptyList())
+    val favorites by prefRepo.favoriteIdsFlow.collectAsState(initial = emptySet())
+    val filteredItems = remember(filter, context, customItems, favorites) {
+        if (isDialog) emptyList() else ZekrRepository.getAllItems(context, customItems)
+            .filter { filter.includes(it, favorites) }
+    }
 
     // Collect daily stats & undoable count for real-time synchronization
     val wirdStats by prefRepo.wirdStatsFlow.collectAsState(initial = remember { WirdStats() })
@@ -240,16 +307,18 @@ private fun TasbeehViewContent(
     val canUndo = undoableCount > 0 && currentCount > 0
 
     // Smart Tasbeeh Context initialization:
-    // 1. If displayed item is repetitive zekr, open on it with saved progress & authentic count.
-    // 2. If Ayah or non-tasbeeh text, open on the last zekr the user was making tasbeeh with.
-    // 3. If no previous zekr, open on default "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ".
-    LaunchedEffect(initialZekrId) {
+    // 1. If opened from notification, binds strictly to matching category (Salawat -> Salawat, Tasbeeh -> Tasbeeh).
+    // 2. If displayed item from widget is repetitive zekr, open on it with saved progress & authentic count.
+    // 3. If previous session was completed, starts fresh session with count = 0 on next item.
+    // 4. If Ayah or non-tasbeeh text, open on active uncompleted tasbeeh or fresh tasbeeh item.
+    LaunchedEffect(initialZekrId, reminderCategory) {
         val loadedSettings = injectedSettings ?: prefRepo.getSettings()
         settings = loadedSettings
 
         val (resolvedItem, savedCount, resolvedTarget) = prefRepo.resolveSmartTasbeehItem(
             context = context,
-            displayedItemId = initialZekrId
+            displayedItemId = initialZekrId,
+            reminderCategory = reminderCategory
         )
         currentItem = resolvedItem
         currentCount = savedCount
@@ -297,7 +366,26 @@ private fun TasbeehViewContent(
         }
     }
 
+    fun selectDhikr(item: ZekrEntity) {
+        if (switching) return
+        switching = true
+        scope.launch {
+            try {
+                val state = prefRepo.selectTasbeehItem(item)
+                currentItem = item
+                currentCount = state.count
+                selectedTarget = state.target
+                isCustomFreeMode = state.isFreeMode
+                ZekrGlanceWidget.updateAllWidgets(context)
+                LockScreenZekrGlanceWidget.updateAllWidgets(context, specificItemId = item.id, specificCount = state.count)
+            } finally {
+                switching = false
+            }
+        }
+    }
+
     fun onPerformTap() {
+        if (switching || currentItem == null) return
         isPressedAnim = true
         val target = if (isCustomFreeMode) Int.MAX_VALUE else selectedTarget
         val nextCount = currentCount + 1
@@ -324,7 +412,7 @@ private fun TasbeehViewContent(
 
     fun performUndo() {
         val item = currentItem ?: return
-        if (!canUndo) return
+        if (!canUndo || switching) return
         triggerHaptic(strong = false)
         playClickSound()
         scope.launch {
@@ -340,6 +428,7 @@ private fun TasbeehViewContent(
     }
 
     fun resetCounter() {
+        if (switching) return
         currentCount = 0
         triggerHaptic(strong = false)
         val item = currentItem
@@ -375,30 +464,53 @@ private fun TasbeehViewContent(
             val custom = prefRepo.getCustomItems()
             val all = ZekrRepository.getAllItems(context, custom)
 
-            val tasbeehPool = all.filter {
-                it.type != ContentType.QURAN_AYAH &&
-                    (it.repetition > 1 || it.category == "التسبيح" || it.tasbeehText != null || it.category.contains("أذكار"))
-            }.ifEmpty { all }
+            val activeCategory = reminderCategory ?: prefRepo.getTasbeehCategory()
+            val targetCat = com.zekr.widget.data.repository.DhikrCategory.fromId(activeCategory)
 
-            val nextResult = ZekrRepository.selectNextFromPool(
-                allItems = tasbeehPool,
-                includeQuran = false,
-                includeHadith = true,
-                includeAzkar = true,
-                smartTimeContextEnabled = false,
-                favoritesOnlyMode = false,
-                favoriteIds = favIds,
-                currentId = currentItem?.id,
-                seenIds = seenIds
-            )
-            currentItem = nextResult.item
-            val docCount = nextResult.item.getEffectiveDocumentedCount()
-            val baseRep = docCount ?: 33
+            val nextItem = if (targetCat != null && targetCat != com.zekr.widget.data.repository.DhikrCategory.WIRD) {
+                val nextRes = com.zekr.widget.data.repository.ZekrRepository.selectNextForCategory(
+                    allItems = all,
+                    category = targetCat,
+                    seenIds = seenIds,
+                    currentId = currentItem?.id
+                )
+                nextRes.item
+            } else {
+                val tasbeehPool = all.filter {
+                    it.type != ContentType.QURAN_AYAH &&
+                        (it.repetition > 1 || it.category == "التسبيح" || it.tasbeehText != null || it.category.contains("أذكار"))
+                }.ifEmpty { all }
+
+                val nextResult = ZekrRepository.selectNextFromPool(
+                    allItems = tasbeehPool,
+                    includeQuran = false,
+                    includeHadith = true,
+                    includeAzkar = true,
+                    smartTimeContextEnabled = false,
+                    favoritesOnlyMode = false,
+                    favoriteIds = favIds,
+                    currentId = currentItem?.id,
+                    seenIds = seenIds
+                )
+                nextResult.item
+            }
+
+            currentItem = nextItem
+            val docCount = nextItem.getEffectiveDocumentedCount()
+            val baseRep = docCount ?: if (activeCategory == "tasbeeh") 100 else 33
             selectedTarget = baseRep
             currentCount = 0
-            prefRepo.saveTasbeehProgress(nextResult.item.id, 0, baseRep, isCustomFreeMode)
+            prefRepo.saveTasbeehProgress(
+                zekrId = nextItem.id,
+                count = 0,
+                target = baseRep,
+                isFreeMode = isCustomFreeMode,
+                category = activeCategory,
+                isCompleted = false,
+                goalRecorded = false
+            )
             ZekrGlanceWidget.updateAllWidgets(context)
-            LockScreenZekrGlanceWidget.updateAllWidgets(context, specificItemId = nextResult.item.id, specificCount = 0)
+            LockScreenZekrGlanceWidget.updateAllWidgets(context, specificItemId = nextItem.id, specificCount = 0)
         }
     }
 
@@ -411,31 +523,20 @@ private fun TasbeehViewContent(
 
     // Dynamic widget styling: Colors, Gradients, Typography, Patterns
     val zekrFont = FontHelper.getComposeFontFamily(settings.font)
-    val accentColor = Color(settings.getAdaptiveAccentColor())
-    val primaryColor = Color(settings.primaryColor)
-    val secondaryColor = Color(settings.secondaryColor)
-
-    // Isolated Card Opacity on background brush:
-    // Texts and icons remain 100% full opacity, while the card background has the user-chosen opacity (default 94%).
-    val effectiveCardOpacity = cardOpacity.coerceIn(0.75f, 1.0f)
-    val backgroundBrush = remember(primaryColor, secondaryColor, settings.isGradient, effectiveCardOpacity) {
-        Brush.verticalGradient(
-            listOf(
-                Color(0xFF13161C).copy(alpha = effectiveCardOpacity),
-                primaryColor.copy(alpha = (effectiveCardOpacity * 0.22f)),
-                Color(0xFF0F1116).copy(alpha = effectiveCardOpacity)
-            )
-        )
-    }
-
-    val buttonBgBrush = remember(primaryColor) {
-        Brush.radialGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.08f),
-                Color(0xFF181B22).copy(alpha = 0.90f)
-            )
-        )
-    }
+    val palette = MaterialTheme.colorScheme
+    val accentColor = if (isDialog) Color(settings.getAdaptiveAccentColor()) else palette.primary
+    val foregroundColor = if (isDialog) Color.White else palette.onSurface
+    val baseColor = if (isDialog) Color(0xFF13161C) else palette.background
+    val surfaceColor = if (isDialog) Color(0xFF181B22) else palette.surface
+    val tintColor = if (isDialog) Color(settings.primaryColor) else palette.primaryContainer
+    val effectiveCardOpacity = if (isDialog) cardOpacity.coerceIn(0.75f, 1f) else 1f
+    val backgroundBrush = Brush.verticalGradient(
+        listOf(baseColor, lerp(baseColor, tintColor, 0.18f), baseColor)
+            .map { it.copy(alpha = effectiveCardOpacity) }
+    )
+    val buttonBgBrush = Brush.radialGradient(
+        listOf(lerp(surfaceColor, accentColor, 0.12f), surfaceColor)
+    )
 
     val item = currentItem
     val docCount = item?.getEffectiveDocumentedCount()
@@ -444,13 +545,65 @@ private fun TasbeehViewContent(
     val isCompleted = !isCustomFreeMode && currentCount >= effectiveTarget
 
     // Proportional dimensions for truly compact and scalable layouts
-    val circleButtonSize = when (dialogSize) {
+    val screenWidth = LocalConfiguration.current.screenWidthDp
+    val circleButtonSize = if (!isDialog) {
+        (screenWidth - 140).coerceIn(140, 240).dp
+    } else when (dialogSize) {
         TasbeehDialogSize.COMPACT -> 98.dp
         TasbeehDialogSize.MEDIUM -> 132.dp
         TasbeehDialogSize.LARGE -> 155.dp
     }
 
-    val counterFontSize = when (dialogSize) {
+    if (confirmResetAll) {
+        AlertDialog(
+            onDismissRequest = { confirmResetAll = false },
+            title = {
+                Text(
+                    text = "تصفير جميع العدادات",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "هل تود تصفير عدادات كافة الأذكار الحالية؟\n\nتنبيه: سيتم تصفير العداد النشط في التطبيق والويدجت، بينما تظل إحصائيات الإنجاز وسجل الأيام في الورد محفوظة دون مساس.",
+                    lineHeight = 22.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmResetAll = false
+                        switching = true
+                        scope.launch {
+                            try {
+                                prefRepo.resetAllTasbeehSessions()
+                                currentCount = 0
+                                ZekrGlanceWidget.updateAllWidgets(context)
+                                LockScreenZekrGlanceWidget.updateAllWidgets(context, specificCount = 0)
+                            } finally {
+                                switching = false
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                ) { Text("تأكيد التصفير", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { confirmResetAll = false },
+                    shape = RoundedCornerShape(10.dp)
+                ) { Text("إلغاء") }
+            }
+        )
+    }
+
+    val counterFontSize = if (!isDialog) 52.sp else when (dialogSize) {
         TasbeehDialogSize.COMPACT -> 27.sp
         TasbeehDialogSize.MEDIUM -> 34.sp
         TasbeehDialogSize.LARGE -> 42.sp
@@ -506,8 +659,8 @@ private fun TasbeehViewContent(
     Card(
         modifier = containerModifier,
         shape = if (isDialog) RoundedCornerShape(26.dp) else RoundedCornerShape(0.dp),
-        colors = CardDefaults.cardColors(containerColor = if (isDialog) Color.Transparent else Color(0xFF0F1115)),
-        border = if (isDialog) BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)) else null,
+        colors = CardDefaults.cardColors(containerColor = if (isDialog) Color.Transparent else palette.background),
+        border = if (isDialog) BorderStroke(1.dp, foregroundColor.copy(alpha = 0.14f)) else null,
         elevation = CardDefaults.cardElevation(defaultElevation = if (isDialog) 12.dp else 0.dp)
     ) {
         Box(
@@ -564,7 +717,7 @@ private fun TasbeehViewContent(
                                 .width(36.dp)
                                 .height(4.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White.copy(alpha = 0.28f))
+                                .background(foregroundColor.copy(alpha = 0.28f))
                         )
                     }
                 }
@@ -584,11 +737,11 @@ private fun TasbeehViewContent(
                             modifier = Modifier
                                 .size(30.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.08f))
+                                .background(foregroundColor.copy(alpha = 0.08f))
                         ) {
                             Text(
                                 text = "✕",
-                                color = Color.White.copy(alpha = 0.88f),
+                                color = foregroundColor.copy(alpha = 0.88f),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -624,14 +777,14 @@ private fun TasbeehViewContent(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color.White.copy(alpha = 0.06f))
-                                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+                                    .background(foregroundColor.copy(alpha = 0.06f))
+                                    .border(1.dp, foregroundColor.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
                                     .clickable { showSettingsSheet = !showSettingsSheet }
                                     .padding(horizontal = 7.dp, vertical = 3.dp)
                             ) {
                                 Text(
                                     text = "🌓 ${(effectiveCardOpacity * 100).roundToInt()}%",
-                                    color = Color.White.copy(alpha = 0.80f),
+                                    color = foregroundColor.copy(alpha = 0.80f),
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -642,10 +795,10 @@ private fun TasbeehViewContent(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(text = "📿", fontSize = 17.sp)
+                            TasbeehNavIcon()
                             Text(
                                 text = "السبحة الإلكترونية",
-                                color = Color.White,
+                                color = foregroundColor,
                                 fontFamily = zekrFont,
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold
@@ -653,20 +806,15 @@ private fun TasbeehViewContent(
                         }
                     }
 
-                    // Reset Counter Button
-                    IconButton(
-                        onClick = { resetCounter() },
-                        modifier = Modifier
-                            .size(30.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.08f))
-                    ) {
-                        Text(
-                            text = "↺",
-                            color = accentColor,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    if (isDialog) {
+                        IconButton(
+                            onClick = { resetCounter() },
+                            modifier = Modifier.semantics { contentDescription = "إعادة الذكر" }
+                        ) {
+                            Text("↺", color = accentColor, fontSize = 18.sp)
+                        }
+                    } else {
+                        TextButton(onClick = { resetCounter() }) { Text("إعادة الذكر") }
                     }
                 }
 
@@ -677,7 +825,7 @@ private fun TasbeehViewContent(
                             .fillMaxWidth()
                             .padding(top = 4.dp, bottom = 4.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.05f))
+                            .background(foregroundColor.copy(alpha = 0.05f))
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -688,7 +836,7 @@ private fun TasbeehViewContent(
                         ) {
                             Text(
                                 text = "عتامة خلفية البطاقة",
-                                color = Color.White.copy(alpha = 0.80f),
+                                color = foregroundColor.copy(alpha = 0.80f),
                                 fontSize = 11.sp,
                                 fontFamily = zekrFont
                             )
@@ -706,7 +854,7 @@ private fun TasbeehViewContent(
                             colors = SliderDefaults.colors(
                                 thumbColor = accentColor,
                                 activeTrackColor = accentColor,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.20f)
+                                inactiveTrackColor = foregroundColor.copy(alpha = 0.20f)
                             ),
                             modifier = Modifier.height(28.dp)
                         )
@@ -720,13 +868,13 @@ private fun TasbeehViewContent(
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.05f))
-                            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
+                            .background(foregroundColor.copy(alpha = 0.05f))
+                            .border(1.dp, foregroundColor.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
                             .padding(horizontal = 9.dp, vertical = 2.5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(text = "✨", fontSize = 10.sp)
+
                         Text(
                             text = "إجمالي تسبيحات اليوم: ${ZekrRepository.toArabicDigits(totalTasbeehsToday)}",
                             color = accentColor,
@@ -739,13 +887,105 @@ private fun TasbeehViewContent(
                     Spacer(modifier = Modifier.height(sectionSpacing))
                 }
 
+                if (!isDialog) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TasbeehFilter.entries.forEach { option ->
+                            val isSelected = filter == option
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    filter = option
+                                    val first = ZekrRepository.getAllItems(context, customItems)
+                                        .firstOrNull { option.includes(it, favorites) }
+                                    if (first != null && !option.includes(currentItem ?: first, favorites)) {
+                                        selectDhikr(first)
+                                    } else if (first != null && currentItem == null) {
+                                        selectDhikr(first)
+                                    }
+                                },
+                                label = { Text(option.title, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = accentColor.copy(alpha = 0.22f),
+                                    selectedLabelColor = accentColor
+                                )
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                if (android.provider.Settings.canDrawOverlays(context)) {
+                                    val start = android.content.Intent(
+                                        context, com.zekr.widget.service.FloatingTasbeehService::class.java
+                                    ).putExtra(com.zekr.widget.service.FloatingTasbeehService.EXTRA_ITEM_ID, item?.id ?: 0)
+                                    androidx.core.content.ContextCompat.startForegroundService(context, start)
+                                } else {
+                                    android.widget.Toast.makeText(
+                                        context, "فعّل إذن الظهور فوق التطبيقات لتشغيل السبحة العائمة.",
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                    context.startActivity(android.content.Intent(
+                                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        android.net.Uri.fromParts("package", context.packageName, null)
+                                    ))
+                                }
+                            },
+                            enabled = item != null
+                        ) {
+                            Text("🫧 السبحة العائمة")
+                        }
+                    }
+                    if (filteredItems.isEmpty()) {
+                        Text("لا توجد أذكار في هذه الفئة", color = palette.onSurfaceVariant)
+                    } else {
+                        val index = filteredItems.indexOfFirst { it.id == item?.id }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(
+                                onClick = { selectDhikr(filteredItems[index - 1]) },
+                                enabled = index > 0 && !switching
+                            ) { Text("الذكر السابق") }
+                            Box {
+                                TextButton(onClick = { showDhikrPicker = true }) { Text("اختر ذكراً") }
+                                DropdownMenu(
+                                    expanded = showDhikrPicker,
+                                    onDismissRequest = { showDhikrPicker = false },
+                                    modifier = Modifier.widthIn(max = 300.dp).heightIn(max = 360.dp)
+                                ) {
+                                    filteredItems.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.getEffectiveTasbeehText(), maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                                            onClick = { showDhikrPicker = false; selectDhikr(option) }
+                                        )
+                                    }
+                                }
+                            }
+                            TextButton(
+                                onClick = { selectDhikr(filteredItems[index + 1]) },
+                                enabled = index < filteredItems.lastIndex && !switching
+                            ) { Text("الذكر التالي") }
+                        }
+                    }
+                }
+
                 // Zekr Formula Card (Separating Repeatable Zekr from Hadith Virtue)
                 if (item != null) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                        colors = CardDefaults.cardColors(containerColor = foregroundColor.copy(alpha = 0.04f)),
+                        border = BorderStroke(1.dp, foregroundColor.copy(alpha = 0.08f))
                     ) {
                         Column(
                             modifier = Modifier
@@ -756,7 +996,7 @@ private fun TasbeehViewContent(
                             // Primary Repeatable Tasbeeh Formula
                             Text(
                                 text = item.getEffectiveTasbeehText(),
-                                color = Color.White,
+                                color = foregroundColor,
                                 fontFamily = zekrFont,
                                 fontSize = zekrFontSize,
                                 lineHeight = zekrLineHeight,
@@ -778,7 +1018,7 @@ private fun TasbeehViewContent(
                             ) {
                                 Text(
                                     text = item.getConciseCitation(),
-                                    color = Color.White.copy(alpha = 0.85f),
+                                    color = foregroundColor.copy(alpha = 0.85f),
                                     fontFamily = zekrFont,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
@@ -799,9 +1039,8 @@ private fun TasbeehViewContent(
 
                 Spacer(modifier = Modifier.height(sectionSpacing))
 
-                // Reorganized Targets: Documented Authentic Count + Quick 33/100 + Custom + Free
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -815,6 +1054,10 @@ private fun TasbeehViewContent(
                         targetPills.add(33 to "٣٣")
                     }
 
+                    if (docCount != 99) {
+                        targetPills.add(99 to "٩٩")
+                    }
+
                     if (docCount != 100) {
                         targetPills.add(100 to "١٠٠")
                     }
@@ -825,22 +1068,26 @@ private fun TasbeehViewContent(
                     targetPills.forEach { (targetVal, label) ->
                         val isSelected = when (targetVal) {
                             -1 -> isCustomFreeMode
-                            -2 -> !isCustomFreeMode && selectedTarget !in listOf(docCount ?: -99, 33, 100)
+                            -2 -> !isCustomFreeMode && selectedTarget !in listOf(docCount ?: -1, 33, 99, 100)
                             else -> !isCustomFreeMode && selectedTarget == targetVal
                         }
 
                         Box(
                             modifier = Modifier
                                 .padding(horizontal = 2.dp)
+                                .defaultMinSize(
+                                    minWidth = if (isDialog) 32.dp else 48.dp,
+                                    minHeight = if (isDialog) 28.dp else 48.dp
+                                )
                                 .clip(RoundedCornerShape(7.dp))
                                 .background(
                                     if (isSelected) accentColor.copy(alpha = 0.18f)
-                                    else Color.White.copy(alpha = 0.04f)
+                                    else foregroundColor.copy(alpha = 0.04f)
                                 )
                                 .border(
                                     1.dp,
                                     if (isSelected) accentColor.copy(alpha = 0.45f)
-                                    else Color.White.copy(alpha = 0.08f),
+                                    else foregroundColor.copy(alpha = 0.08f),
                                     RoundedCornerShape(7.dp)
                                 )
                                 .clickable {
@@ -869,13 +1116,14 @@ private fun TasbeehViewContent(
                                         }
                                     }
                                 }
-                                .padding(horizontal = 6.5.dp, vertical = 2.5.dp)
+                                .padding(horizontal = 6.5.dp, vertical = 2.5.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = label,
-                                color = if (isSelected) accentColor else Color.White.copy(alpha = 0.70f),
+                                color = if (isSelected) accentColor else foregroundColor.copy(alpha = 0.70f),
                                 fontFamily = zekrFont,
-                                fontSize = 10.5.sp,
+                                fontSize = if (isDialog) 10.5.sp else 13.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
                         }
@@ -884,31 +1132,35 @@ private fun TasbeehViewContent(
 
                 Spacer(modifier = Modifier.height(sectionSpacing))
 
-                // Tasbeeh Center Area: Counter Circle with Undo Button
+                if (!isDialog) Spacer(Modifier.height(24.dp))
+
+                // Tasbeeh Center Area: Counter Circle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    // Undo Button (Disabled when no taps can be undone)
-                    IconButton(
-                        onClick = { performUndo() },
-                        enabled = canUndo,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(if (canUndo) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.02f))
-                            .border(1.dp, if (canUndo) accentColor.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.04f), CircleShape)
-                    ) {
-                        Text(
-                            text = "↶",
-                            color = if (canUndo) accentColor else Color.White.copy(alpha = 0.25f),
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    if (isDialog) {
+                        IconButton(
+                            onClick = { performUndo() },
+                            enabled = canUndo,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .semantics { contentDescription = "تراجع" }
+                                .clip(CircleShape)
+                                .background(if (canUndo) foregroundColor.copy(alpha = 0.08f) else foregroundColor.copy(alpha = 0.02f))
+                                .border(1.dp, if (canUndo) accentColor.copy(alpha = 0.35f) else foregroundColor.copy(alpha = 0.04f), CircleShape)
+                        ) {
+                            Text(
+                                text = "↶",
+                                color = if (canUndo) accentColor else foregroundColor.copy(alpha = 0.25f),
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                    }
 
                     // Main Counter Circle
                     Box(
@@ -917,7 +1169,7 @@ private fun TasbeehViewContent(
                             .graphicsLayer(scaleX = buttonScale, scaleY = buttonScale)
                             .clip(CircleShape)
                             .background(buttonBgBrush)
-                            .border(1.dp, Color.White.copy(alpha = 0.14f), CircleShape)
+                            .border(1.dp, foregroundColor.copy(alpha = 0.14f), CircleShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = ripple(color = accentColor)
@@ -945,7 +1197,7 @@ private fun TasbeehViewContent(
                         ) {
                             Text(
                                 text = ZekrRepository.toArabicDigits(currentCount),
-                                color = Color.White,
+                                color = foregroundColor,
                                 fontFamily = zekrFont,
                                 fontSize = counterFontSize,
                                 fontWeight = FontWeight.Bold,
@@ -963,23 +1215,66 @@ private fun TasbeehViewContent(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    if (isDialog) {
+                        Spacer(modifier = Modifier.width(12.dp))
 
-                    // Next Zekr Shuffle Icon
-                    IconButton(
-                        onClick = { shuffleNextZekr() },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape)
+                        IconButton(
+                            onClick = { shuffleNextZekr() },
+                            modifier = Modifier
+                                .size(34.dp)
+                                .semantics { contentDescription = "الذكر التالي" }
+                                .clip(CircleShape)
+                                .background(foregroundColor.copy(alpha = 0.08f))
+                                .border(1.dp, foregroundColor.copy(alpha = 0.10f), CircleShape)
+                        ) {
+                            Text(
+                                text = "‹",
+                                color = foregroundColor.copy(alpha = 0.85f),
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                if (!isDialog) {
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // Explicit actions row: Undo, Reset Dhikr, Reset All
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "‹",
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        OutlinedButton(
+                            onClick = { performUndo() },
+                            enabled = canUndo,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.heightIn(min = 44.dp)
+                        ) {
+                            Text("↶ تراجع", fontWeight = FontWeight.SemiBold)
+                        }
+
+                        OutlinedButton(
+                            onClick = { resetCounter() },
+                            enabled = currentCount > 0,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.heightIn(min = 44.dp)
+                        ) {
+                            Text("↺ إعادة الذكر", fontWeight = FontWeight.SemiBold)
+                        }
+
+                        OutlinedButton(
+                            onClick = { confirmResetAll = true },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.45f)),
+                            modifier = Modifier.heightIn(min = 44.dp)
+                        ) {
+                            Text("✕ تصفير الكل", fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
@@ -994,7 +1289,7 @@ private fun TasbeehViewContent(
                             .fillMaxWidth()
                             .padding(top = 6.dp),
                         shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f)),
+                        colors = CardDefaults.cardColors(containerColor = foregroundColor.copy(alpha = 0.06f)),
                         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.40f))
                     ) {
                         Row(
@@ -1005,7 +1300,7 @@ private fun TasbeehViewContent(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "✨ تم بحمد الله إتمام الذكر!",
+                                text = "تم بحمد الله إتمام الذكر",
                                 color = accentColor,
                                 fontFamily = zekrFont,
                                 fontSize = 11.5.sp,
@@ -1030,12 +1325,12 @@ private fun TasbeehViewContent(
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(
                                     if (vibrationEnabled) accentColor.copy(alpha = 0.16f)
-                                    else Color.White.copy(alpha = 0.04f)
+                                    else foregroundColor.copy(alpha = 0.04f)
                                 )
                                 .border(
                                     1.dp,
                                     if (vibrationEnabled) accentColor.copy(alpha = 0.45f)
-                                    else Color.White.copy(alpha = 0.08f),
+                                    else foregroundColor.copy(alpha = 0.08f),
                                     RoundedCornerShape(8.dp)
                                 )
                                 .clickable {
@@ -1047,8 +1342,8 @@ private fun TasbeehViewContent(
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = if (vibrationEnabled) "📳 اهتزاز" else "📴 صامت",
-                                color = if (vibrationEnabled) accentColor else Color.White.copy(alpha = 0.45f),
+                                text = if (vibrationEnabled) "اهتزاز" else "الاهتزاز متوقف",
+                                color = if (vibrationEnabled) accentColor else foregroundColor.copy(alpha = 0.45f),
                                 fontFamily = zekrFont,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium
@@ -1061,12 +1356,12 @@ private fun TasbeehViewContent(
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(
                                     if (soundEnabled) accentColor.copy(alpha = 0.16f)
-                                    else Color.White.copy(alpha = 0.04f)
+                                    else foregroundColor.copy(alpha = 0.04f)
                                 )
                                 .border(
                                     1.dp,
                                     if (soundEnabled) accentColor.copy(alpha = 0.45f)
-                                    else Color.White.copy(alpha = 0.08f),
+                                    else foregroundColor.copy(alpha = 0.08f),
                                     RoundedCornerShape(8.dp)
                                 )
                                 .clickable {
@@ -1078,8 +1373,8 @@ private fun TasbeehViewContent(
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = if (soundEnabled) "🔊 صوت" else "🔈 كتم",
-                                color = if (soundEnabled) accentColor else Color.White.copy(alpha = 0.45f),
+                                text = if (soundEnabled) "صوت" else "الصوت مكتوم",
+                                color = if (soundEnabled) accentColor else foregroundColor.copy(alpha = 0.45f),
                                 fontFamily = zekrFont,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium
@@ -1098,7 +1393,7 @@ private fun TasbeehViewContent(
             title = {
                 Text(
                     text = "تحديد هدف التسبيح",
-                    color = Color.White,
+                    color = foregroundColor,
                     fontFamily = zekrFont,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
@@ -1108,7 +1403,7 @@ private fun TasbeehViewContent(
                 Column {
                     Text(
                         text = "أدخل عدد التسبيحات المطلوب:",
-                        color = Color.White.copy(alpha = 0.80f),
+                        color = foregroundColor.copy(alpha = 0.80f),
                         fontSize = 13.sp,
                         fontFamily = zekrFont
                     )
@@ -1119,10 +1414,10 @@ private fun TasbeehViewContent(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
+                            focusedTextColor = foregroundColor,
+                            unfocusedTextColor = foregroundColor,
                             focusedBorderColor = accentColor,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.30f)
+                            unfocusedBorderColor = foregroundColor.copy(alpha = 0.30f)
                         )
                     )
                 }
@@ -1154,10 +1449,10 @@ private fun TasbeehViewContent(
             },
             dismissButton = {
                 TextButton(onClick = { showCustomTargetDialog = false }) {
-                    Text(text = "إلغاء", color = Color.White.copy(alpha = 0.60f))
+                    Text(text = "إلغاء", color = foregroundColor.copy(alpha = 0.70f))
                 }
             },
-            containerColor = Color(0xFF1A1D24),
+            containerColor = surfaceColor,
             shape = RoundedCornerShape(16.dp)
         )
     }
@@ -1174,7 +1469,7 @@ private fun TasbeehViewContent(
                     Text(text = "📖", fontSize = 18.sp)
                     Text(
                         text = "تخريج وفضل الذكر",
-                        color = Color.White,
+                        color = foregroundColor,
                         fontFamily = zekrFont,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
@@ -1190,7 +1485,9 @@ private fun TasbeehViewContent(
                 ) {
                     // Full Text (Wrapped in Quran brackets if Ayah)
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isDialog) Color.White.copy(alpha = 0.05f) else palette.surfaceVariant.copy(alpha = 0.5f)
+                        ),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -1204,7 +1501,7 @@ private fun TasbeehViewContent(
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
                                 text = item.getFormattedArabicText(),
-                                color = Color.White,
+                                color = foregroundColor,
                                 fontFamily = zekrFont,
                                 fontSize = 15.sp,
                                 lineHeight = 24.sp
@@ -1229,7 +1526,7 @@ private fun TasbeehViewContent(
                                 Spacer(modifier = Modifier.height(3.dp))
                                 Text(
                                     text = item.virtueText,
-                                    color = Color.White.copy(alpha = 0.95f),
+                                    color = foregroundColor.copy(alpha = 0.95f),
                                     fontFamily = zekrFont,
                                     fontSize = 14.sp,
                                     lineHeight = 22.sp
@@ -1249,7 +1546,7 @@ private fun TasbeehViewContent(
                     } else {
                         Text(
                             text = "العدد الشرعي: غير محدد بلفظ الحديث (تسبيح مطلق)",
-                            color = Color.White.copy(alpha = 0.65f),
+                            color = foregroundColor.copy(alpha = 0.70f),
                             fontSize = 11.5.sp
                         )
                     }
@@ -1257,19 +1554,19 @@ private fun TasbeehViewContent(
                     // Source and Reference
                     Text(
                         text = "المصدر: ${item.source}",
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = foregroundColor.copy(alpha = 0.85f),
                         fontSize = 12.sp
                     )
                     Text(
                         text = "التخريج: ${item.reference}",
-                        color = Color.White.copy(alpha = 0.70f),
+                        color = foregroundColor.copy(alpha = 0.70f),
                         fontSize = 11.5.sp
                     )
 
                     if (item.englishMeaning.isNotBlank()) {
                         Text(
                             text = item.englishMeaning,
-                            color = Color.White.copy(alpha = 0.60f),
+                            color = foregroundColor.copy(alpha = 0.60f),
                             fontSize = 11.sp
                         )
                     }
@@ -1280,7 +1577,7 @@ private fun TasbeehViewContent(
                     Text(text = "إغلاق", color = accentColor, fontWeight = FontWeight.Bold)
                 }
             },
-            containerColor = Color(0xFF191C22),
+            containerColor = surfaceColor,
             shape = RoundedCornerShape(16.dp)
         )
     }
